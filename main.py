@@ -55,13 +55,14 @@ def delay_before_exit():
     time.sleep(EXIT_DELAY_SECONDS)
 
 
-def market_exit_option():
-    """Fires a market order to instantly square off the options contract."""
+def market_exit_option(delay_before_order=False):
+    """Fires a market order to square off the options contract."""
     global is_exited
     if is_exited:
         return
 
-    delay_before_exit()
+    if delay_before_order:
+        delay_before_exit()
 
     net_qty = get_position_qty(OPTIONS_SYMBOL)
     if net_qty == 0:
@@ -108,11 +109,11 @@ def on_message(message):
         # Assuming you are LONG on the option (Exiting if index drops below SL or breaks Target)
         if current_index_price <= INDEX_STOP_LOSS:
             print(f"Stop-Loss triggered! Index {current_index_price} <= {INDEX_STOP_LOSS}")
-            market_exit_option()
+            market_exit_option(delay_before_order=False)
 
         elif current_index_price >= INDEX_TARGET:
             print(f"Target profit hit! Index {current_index_price} >= {INDEX_TARGET}")
-            market_exit_option()
+            market_exit_option(delay_before_order=True)
 
 def on_error(message):
     print("WebSocket Error:", message)
