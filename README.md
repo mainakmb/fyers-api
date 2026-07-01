@@ -103,6 +103,16 @@ Required secret:
 
 Use with care: the workflow will attempt a real market exit if an open position exists.
 
+## Operational notes
+
+### The access token lifecycle
+
+FYERS access tokens expire daily. If you generated your `auth` file token today, it will not work tomorrow morning. You will need to manually log in, generate a fresh `ACCESS_TOKEN` tomorrow morning post 8:00 AM, and push that updated token to your GitHub repository secrets or your deployment environment.
+
+### The 6-hour wall
+
+Since you are trading BSE Sensex options, remember that if your trade lasts the entire day, GitHub Actions will forcefully kill your runner after 6 hours of continuous execution. Keep an eye on your dashboard near market close to ensure it hasn't timed out.
+
 ## Tests
 
 ```bash
