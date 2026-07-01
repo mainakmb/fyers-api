@@ -43,12 +43,9 @@ Generate a daily access token using `auth.py`:
 python auth.py
 ```
 
-Complete the browser login flow, paste the `auth_code` when prompted, and copy the access token from the output.
+Complete the browser login flow and paste the `auth_code` when prompted. On success, the access token is written automatically to `auth` in the project root (gitignored).
 
-Store the token in one of these ways:
-
-- **Local file (recommended for development):** save the token to an `auth` file in the project root (this file is gitignored).
-- **Environment variable:** set `FYERS_ACCESS_TOKEN`.
+Alternatively, set `FYERS_ACCESS_TOKEN` instead of using the `auth` file:
 
 ```bash
 export FYERS_ACCESS_TOKEN="your_access_token_here"

@@ -1,5 +1,9 @@
 import webbrowser
+from pathlib import Path
+
 from fyers_apiv3 import fyersModel
+
+AUTH_FILE = Path(__file__).with_name("auth")
 
 # --- 1. ENTER YOUR DETAILS ---
 CLIENT_ID = "P6WNRG76UH-100"       # e.g., "ABCD1234-100" (Must end in -100)
@@ -46,7 +50,10 @@ if auth_code:
     response = session.generate_token()
     
     if "access_token" in response:
+        access_token = response["access_token"]
+        AUTH_FILE.write_text(access_token, encoding="utf-8")
         print("\n✅ Access Token Generated Successfully!")
-        print(f"YOUR ACCESS_TOKEN:\n{response['access_token']}")
+        print(f"Saved to {AUTH_FILE}")
+        print(f"YOUR ACCESS_TOKEN:\n{access_token}")
     else:
         print("\n❌ Failed to generate token. Error details:", response)
