@@ -48,6 +48,10 @@ jobs:
         run: |
           python -m unittest discover -s tests -v
 
+      - name: Run API connectivity test
+        run: |
+          python test-api.py
+
       - name: Run trading script
         run: |
           python main.py
