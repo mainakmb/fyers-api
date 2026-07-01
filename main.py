@@ -18,12 +18,12 @@ else:
 WS_ACCESS_TOKEN = f"{APP_ID}:{ACCESS_TOKEN}"
 
 # --- 2. DEFINE YOUR TRACKING TARGETS ---
-INDEX_SYMBOL = "BSE:SENSEX-INDEX"   # Index to monitor (e.g., "NSE:NIFTYBANK-INDEX")
-OPTIONS_SYMBOL = "BSE:SENSEX2670276900PE"  # The option position you want to exit
+INDEX_SYMBOL = os.getenv("INDEX_SYMBOL", "BSE:SENSEX-INDEX")
+OPTIONS_SYMBOL = os.getenv("OPTIONS_SYMBOL", "BSE:SENSEX2670276900PE")
 
 # Index Spot values for exit triggers
-INDEX_STOP_LOSS = 77200.0   # Exit if index falls below this
-INDEX_TARGET = 76480.0      # Exit if index rises above this
+INDEX_STOP_LOSS = float(os.getenv("INDEX_STOP_LOSS", "77200.0"))
+INDEX_TARGET = float(os.getenv("INDEX_TARGET", "76480.0"))
 
 # Global flag to prevent multiple orders triggering simultaneously 
 is_exited = False
