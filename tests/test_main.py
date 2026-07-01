@@ -42,6 +42,12 @@ class RuntimeConfigTests(unittest.TestCase):
             self.assertEqual(main.INDEX_STOP_LOSS, 77200.0)
             self.assertEqual(main.INDEX_TARGET, 76480.0)
 
+    def test_exit_delay_is_configured_for_two_seconds(self):
+        import main
+
+        main = importlib.reload(main)
+        self.assertEqual(main.EXIT_DELAY_SECONDS, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

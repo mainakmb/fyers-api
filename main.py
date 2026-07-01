@@ -1,4 +1,5 @@
 import os
+import time
 
 from pathlib import Path
 
@@ -27,6 +28,7 @@ INDEX_TARGET = float(os.getenv("INDEX_TARGET", "76480.0"))
 
 # Global flag to prevent multiple orders triggering simultaneously 
 is_exited = False
+EXIT_DELAY_SECONDS = 2
 
 # Initialize the REST API client for execution
 fyers_rest = fyersModel.FyersModel(
@@ -48,11 +50,18 @@ def get_position_qty(symbol):
         print(f"Error fetching position size: {e}")
     return 0
 
+def delay_before_exit():
+    """Pause briefly before sending the exit order after a trigger."""
+    time.sleep(EXIT_DELAY_SECONDS)
+
+
 def market_exit_option():
     """Fires a market order to instantly square off the options contract."""
     global is_exited
     if is_exited:
         return
+
+    delay_before_exit()
 
     net_qty = get_position_qty(OPTIONS_SYMBOL)
     if net_qty == 0:
