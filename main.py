@@ -1,13 +1,12 @@
 import os
 import time
-
 from pathlib import Path
 
 from fyers_apiv3 import fyersModel
 from fyers_apiv3.FyersWebsocket import data_ws
 
 # --- 1. CONFIGURATION ---
-APP_ID = "P6WNRG76UH-100"          # e.g., "XCXXXXXXxx-100"
+APP_ID = "P6WNRG76UH-100"          
 AUTH_FILE = Path(__file__).with_name("auth")
 
 if AUTH_FILE.exists():
@@ -15,7 +14,7 @@ if AUTH_FILE.exists():
 else:
     ACCESS_TOKEN = os.getenv("FYERS_ACCESS_TOKEN", "")
 
-# COMBINED TOKEN FOR WEBSOCKET: Fyers requires "APP_ID:ACCESS_TOKEN" format
+# COMBINED TOKEN FOR WEBSOCKET
 WS_ACCESS_TOKEN = f"{APP_ID}:{ACCESS_TOKEN}"
 
 # --- 2. DEFINE YOUR TRACKING TARGETS ---
@@ -26,8 +25,9 @@ OPTIONS_SYMBOL = os.getenv("OPTIONS_SYMBOL", "BSE:SENSEX2670276900PE")
 INDEX_STOP_LOSS = float(os.getenv("INDEX_STOP_LOSS", "77200.0"))
 INDEX_TARGET = float(os.getenv("INDEX_TARGET", "76480.0"))
 
-# Global flag to prevent multiple orders triggering simultaneously 
+# Global tracking flags
 is_exited = False
+target_triggered_at = None  # ✅ FIXED: Initialized globally to prevent NameError
 EXIT_DELAY_SECONDS = 2
 
 # Initialize the REST API client for execution
@@ -50,19 +50,12 @@ def get_position_qty(symbol):
         print(f"Error fetching position size: {e}")
     return 0
 
-def delay_before_exit():
-    """Pause briefly before sending the exit order after a trigger."""
-    time.sleep(EXIT_DELAY_SECONDS)
 
-
-def market_exit_option(delay_before_order=False):
-    """Fires a market order to square off the options contract."""
+def market_exit_option():
+    """Fires a market order to square off the options contract instantly."""
     global is_exited
     if is_exited:
         return
-
-    if delay_before_order:
-        delay_before_exit()
 
     net_qty = get_position_qty(OPTIONS_SYMBOL)
     if net_qty == 0:
@@ -77,7 +70,7 @@ def market_exit_option(delay_before_order=False):
     order_data = {
         "symbol": OPTIONS_SYMBOL,
         "qty": abs_qty,
-        "type": 2,                # 2 = Market Order (Ensures instant execution)
+        "type": 2,                # 2 = Market Order
         "side": exit_side,
         "productType": "MARGIN",  # Change to "INTRADAY" if your position is intraday
         "limitPrice": 0,
@@ -95,25 +88,46 @@ def market_exit_option(delay_before_order=False):
 
 # --- 3. WEBSOCKET CALLBACKS ---
 def on_message(message):
-    """Callback triggered whenever a new tick arrives from the index chart."""
-    global is_exited
+    global is_exited, target_triggered_at
     if is_exited:
         return
 
-    # Extract the Last Traded Price (ltp) from the tick payload
     if "ltp" in message:
         current_index_price = float(message["ltp"])
         print(f"Live Index Price ({INDEX_SYMBOL}): {current_index_price}")
 
-        # Check your conditional chart strategies
-        # Assuming you are LONG on the option (Exiting if index drops below SL or breaks Target)
-        if current_index_price <= INDEX_STOP_LOSS:
-            print(f"Stop-Loss triggered! Index {current_index_price} <= {INDEX_STOP_LOSS}")
-            market_exit_option(delay_before_order=False)
+        # --- DYNAMICALLY EXTRACT OPTION TYPE FROM SYMBOL ---
+        option_type = OPTIONS_SYMBOL.upper()[-2:] 
 
-        elif current_index_price >= INDEX_TARGET:
-            print(f"Target profit hit! Index {current_index_price} >= {INDEX_TARGET}")
-            market_exit_option(delay_before_order=True)
+        if option_type == "CE":
+            sl_triggered = current_index_price <= INDEX_STOP_LOSS
+            target_triggered = current_index_price >= INDEX_TARGET
+        elif option_type == "PE":
+            sl_triggered = current_index_price >= INDEX_STOP_LOSS
+            target_triggered = current_index_price <= INDEX_TARGET
+        else:
+            print(f"⚠️ Unknown option type in symbol: {OPTIONS_SYMBOL}. Aborting evaluation.")
+            return
+
+        # 1. IMMEDIATE STOP-LOSS (No Delay)
+        if sl_triggered:
+            print(f"🛑 Stop-Loss triggered! Index at {current_index_price}")
+            market_exit_option()
+            return
+
+        # 2. TARGET MECHANISM (With absolute 2-second premium float)
+        if target_triggered or target_triggered_at is not None:
+            
+            # Step A: Lock in the initial trigger timestamp
+            if target_triggered_at is None:
+                target_triggered_at = time.time()
+                print(f"🎯 Target initially breached at {current_index_price}. "
+                      f"Premium float delay activated for {EXIT_DELAY_SECONDS} seconds...")
+            
+            # Step B: Check if the 2-second floating window has expired
+            elif time.time() - target_triggered_at >= EXIT_DELAY_SECONDS:
+                print(f"⏱️ {EXIT_DELAY_SECONDS}s float period over. Executing absolute market exit!")
+                market_exit_option()
 
 def on_error(message):
     print("WebSocket Error:", message)
@@ -123,25 +137,22 @@ def on_close(message):
 
 def on_open():
     """Subscribe to the index symbol once the socket opens."""
-    # Using 'lite' mode (litemode=True below) grants optimized bandwidth for raw LTP ticks
     data_type = "SymbolUpdate"
     fyers_ws.subscribe(symbols=[INDEX_SYMBOL], data_type=data_type)
     print(f"Subscribed to WebSocket stream for: {INDEX_SYMBOL}")
 
 # --- 4. EXECUTION ---
 if __name__ == "__main__":
-    # Validate there's an actual option position before spinning up the socket loop
     initial_qty = get_position_qty(OPTIONS_SYMBOL)
     if initial_qty == 0:
         print(f"Aborting: No open position found for {OPTIONS_SYMBOL}")
     else:
         print(f"Tracking open position of {initial_qty} Qty. Initiating WebSocket...")
         
-        # Initialize Fyers Data Socket
         fyers_ws = data_ws.FyersDataSocket(
             access_token=WS_ACCESS_TOKEN,
             log_path="",
-            litemode=True,  # Set to True if you only need the 'ltp' payload (highly efficient)
+            litemode=True,  
             write_to_file=False,
             reconnect=True,
             on_connect=on_open,
