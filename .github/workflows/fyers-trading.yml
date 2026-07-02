@@ -50,6 +50,10 @@ jobs:
 
       - name: Run API connectivity test
         run: |
+          if [ -z "$FYERS_ACCESS_TOKEN" ]; then
+            echo "FYERS_ACCESS_TOKEN is not set. Check the repository or environment secret." >&2
+            exit 1
+          fi
           python test-api.py
 
       - name: Run trading script
