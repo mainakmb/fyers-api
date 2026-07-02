@@ -6,8 +6,8 @@ from fyers_apiv3 import fyersModel
 AUTH_FILE = Path(__file__).with_name("auth")
 
 # --- 1. ENTER YOUR DETAILS ---
-CLIENT_ID = "P6WNRG76UH-100"       # e.g., "ABCD1234-100" (Must end in -100)
-SECRET_KEY = "ZMLW2C50NV"
+CLIENT_ID = "E3J29EV658-200"       # e.g., "ABCD1234-100" (Must end in -100)
+SECRET_KEY = "YR6UuCl7PsRxosmB"
 REDIRECT_URI = "https://trade.fyers.in/api-login/redirect-uri/index.html"
 
 # --- 2. INITIALIZE SESSION MODEL ---
