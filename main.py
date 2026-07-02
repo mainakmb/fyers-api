@@ -2,11 +2,15 @@ import os
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from fyers_apiv3 import fyersModel
 from fyers_apiv3.FyersWebsocket import data_ws
 
 # --- 1. CONFIGURATION ---
-APP_ID = "P6WNRG76UH-100"          
+load_dotenv(Path(__file__).with_name(".env"))
+
+APP_ID = "E3J29EV658-200"          
 AUTH_FILE = Path(__file__).with_name("auth")
 
 if AUTH_FILE.exists():
@@ -18,17 +22,19 @@ else:
 WS_ACCESS_TOKEN = f"{APP_ID}:{ACCESS_TOKEN}"
 
 # --- 2. DEFINE YOUR TRACKING TARGETS ---
-INDEX_SYMBOL = os.getenv("INDEX_SYMBOL", "BSE:SENSEX-INDEX")
-OPTIONS_SYMBOL = os.getenv("OPTIONS_SYMBOL", "BSE:SENSEX2670276900PE")
+INDEX_SYMBOL = os.getenv("INDEX_SYMBOL", "NSE:NIFTY50-INDEX")
+OPTIONS_SYMBOL = os.getenv("OPTIONS_SYMBOL", "BSE:SENSEX2670277100PE")
 
 # Index Spot values for exit triggers
-INDEX_STOP_LOSS = float(os.getenv("INDEX_STOP_LOSS", "77200.0"))
-INDEX_TARGET = float(os.getenv("INDEX_TARGET", "76480.0"))
+INDEX_STOP_LOSS = float(os.getenv("INDEX_STOP_LOSS", "24150.0"))
+INDEX_TARGET = float(os.getenv("INDEX_TARGET", "24036.0"))
 
 # Global tracking flags
 is_exited = False
 target_triggered_at = None  # ✅ FIXED: Initialized globally to prevent NameError
 EXIT_DELAY_SECONDS = 2
+
+print(f"Using config -> symbol={INDEX_SYMBOL}, stop_loss={INDEX_STOP_LOSS}, target={INDEX_TARGET}")
 
 # Initialize the REST API client for execution
 fyers_rest = fyersModel.FyersModel(
@@ -163,4 +169,3 @@ if __name__ == "__main__":
         
         fyers_ws.connect()
         fyers_ws.keep_running()
-        
