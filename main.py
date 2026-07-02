@@ -24,6 +24,7 @@ WS_ACCESS_TOKEN = f"{APP_ID}:{ACCESS_TOKEN}"
 # --- 2. DEFINE YOUR TRACKING TARGETS ---
 INDEX_SYMBOL = os.getenv("INDEX_SYMBOL", "NSE:NIFTY50-INDEX")
 OPTIONS_SYMBOL = os.getenv("OPTIONS_SYMBOL", "BSE:SENSEX2670277100PE")
+PRODUCT_TYPE = os.getenv("PRODUCT_TYPE", "INTRADAY").upper()
 
 # Index Spot values for exit triggers
 INDEX_STOP_LOSS = float(os.getenv("INDEX_STOP_LOSS", "24150.0"))
@@ -34,7 +35,7 @@ is_exited = False
 target_triggered_at = None  # ✅ FIXED: Initialized globally to prevent NameError
 EXIT_DELAY_SECONDS = 2
 
-print(f"Using config -> symbol={INDEX_SYMBOL}, stop_loss={INDEX_STOP_LOSS}, target={INDEX_TARGET}")
+print(f"Using config -> symbol={INDEX_SYMBOL}, stop_loss={INDEX_STOP_LOSS}, target={INDEX_TARGET}, product_type={PRODUCT_TYPE}")
 
 # Initialize the REST API client for execution
 fyers_rest = fyersModel.FyersModel(
@@ -78,7 +79,7 @@ def market_exit_option():
         "qty": abs_qty,
         "type": 2,                # 2 = Market Order
         "side": exit_side,
-        "productType": "MARGIN",  # Change to "INTRADAY" if your position is intraday
+        "productType": PRODUCT_TYPE,
         "limitPrice": 0,
         "stopPrice": 0,
         "validity": "DAY",
