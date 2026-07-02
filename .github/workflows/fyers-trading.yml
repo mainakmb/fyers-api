@@ -23,6 +23,7 @@ on:
 jobs:
   validate-and-run:
     runs-on: ubuntu-latest
+    environment: production
     env:
       INDEX_SYMBOL: ${{ github.event.inputs.index_symbol }}
       OPTIONS_SYMBOL: ${{ github.event.inputs.options_symbol }}
