@@ -4,7 +4,7 @@ from pathlib import Path
 from fyers_apiv3 import fyersModel
 
 # --- 1. CONFIGURATION ---
-APP_ID = "P6WNRG76UH-100"          # e.g., "XCXXXXXXxx-100"
+APP_ID = "E3J29EV658-200"          # e.g., "XCXXXXXXxx-100"
 AUTH_FILE = Path(__file__).with_name("auth")
 
 if AUTH_FILE.exists():
