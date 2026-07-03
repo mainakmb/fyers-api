@@ -37,8 +37,10 @@ python sell.py       # manage exit after position is open
 
 | Option | Buy triggers when |
 |--------|-------------------|
-| CE | Index ≥ `INDEX_ENTRY` |
-| PE | Index ≤ `INDEX_ENTRY` |
+| CE (call) | Index ≤ `INDEX_ENTRY` (buy on dip) |
+| PE (put)  | Index ≥ `INDEX_ENTRY` (buy on rally) |
+
+Entry direction matches `sell.py` stop-loss logic so buy and sell levels stay consistent.
 
 Optional `ENTRY_DELAY_SECONDS` holds the order briefly after the trigger. If price retraces out of the entry zone before the delay expires, the timer resets.
 

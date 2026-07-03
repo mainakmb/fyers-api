@@ -29,6 +29,24 @@ class BuyConfigTests(unittest.TestCase):
             self.assertEqual(buy.INDEX_ENTRY, 75000.0)
             self.assertEqual(buy.ORDER_LOTS, 2)
 
+    def test_parse_option_type_from_suffix(self):
+        import buy
+
+        buy = importlib.reload(buy)
+        self.assertEqual(buy.parse_option_type("NSE:NIFTY25000CE"), "CE")
+        self.assertEqual(buy.parse_option_type("BSE:SENSEX2670277100PE"), "PE")
+
+    def test_entry_triggered_uses_put_and_call_logic(self):
+        import buy
+
+        buy = importlib.reload(buy)
+        buy.INDEX_ENTRY = 100.0
+
+        self.assertTrue(buy.entry_triggered(99.0, "CE"))
+        self.assertFalse(buy.entry_triggered(101.0, "CE"))
+        self.assertTrue(buy.entry_triggered(101.0, "PE"))
+        self.assertFalse(buy.entry_triggered(99.0, "PE"))
+
 
 class SellConfigTests(unittest.TestCase):
     def test_uses_environment_values_when_present(self):

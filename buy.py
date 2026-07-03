@@ -130,12 +130,27 @@ def market_buy_option():
         print("Entry order failed. Will keep monitoring index for retry.")
 
 
-def entry_triggered(current_index_price):
-    """Return True when index price crosses the configured entry level."""
-    if "CE" in OPTIONS_SYMBOL:
-        return current_index_price >= INDEX_ENTRY
-    if "PE" in OPTIONS_SYMBOL:
+def parse_option_type(symbol):
+    """Return CE or PE based on the option contract suffix."""
+    symbol = symbol.upper()
+    if symbol.endswith("PE"):
+        return "PE"
+    if symbol.endswith("CE"):
+        return "CE"
+    raise ValueError(f"Unable to parse CE/PE from {symbol}")
+
+
+def entry_triggered(current_index_price, option_type):
+    """Return True when index price crosses the configured entry level.
+
+    Uses the same index direction as sell.py stop-loss logic:
+    - Call (CE): buy on dip when index <= INDEX_ENTRY
+    - Put (PE): buy on rally when index >= INDEX_ENTRY
+    """
+    if option_type == "CE":
         return current_index_price <= INDEX_ENTRY
+    if option_type == "PE":
+        return current_index_price >= INDEX_ENTRY
     return False
 
 
@@ -155,25 +170,31 @@ def on_message(message):
 
     current_index_price = float(message["ltp"])
 
-    if "CE" not in OPTIONS_SYMBOL and "PE" not in OPTIONS_SYMBOL:
-        print(f"Unable to parse CE/PE from {OPTIONS_SYMBOL}. Aborting.")
+    try:
+        option_type = parse_option_type(OPTIONS_SYMBOL)
+    except ValueError as exc:
+        print(f"{exc}. Aborting.")
         return
 
-    if not entry_triggered(current_index_price):
+    if not entry_triggered(current_index_price, option_type):
         if entry_triggered_at is not None:
             print(f"Price retraced to {current_index_price}. Resetting entry window.")
             entry_triggered_at = None
         return
 
     if ENTRY_DELAY_SECONDS <= 0:
-        print(f"Entry level hit at index {current_index_price}. Buying at market.")
+        print(
+            f"{option_type} entry hit at index {current_index_price} "
+            f"(rule: {'<=' if option_type == 'CE' else '>='} {INDEX_ENTRY}). Buying at market."
+        )
         market_buy_option()
         return
 
     if entry_triggered_at is None:
         entry_triggered_at = time.time()
         print(
-            f"Entry level hit at {current_index_price}. "
+            f"{option_type} entry hit at {current_index_price} "
+            f"(rule: {'<=' if option_type == 'CE' else '>='} {INDEX_ENTRY}). "
             f"Waiting {ENTRY_DELAY_SECONDS}s before market buy..."
         )
     elif time.time() - entry_triggered_at >= ENTRY_DELAY_SECONDS:
@@ -203,11 +224,20 @@ if __name__ == "__main__":
 
     print(f"Resolved lot size={lot_size}, order_qty={order_qty}")
 
+    try:
+        option_type = parse_option_type(OPTIONS_SYMBOL)
+    except ValueError as exc:
+        raise SystemExit(f"Aborting: {exc}") from exc
+
+    entry_rule = "<=" if option_type == "CE" else ">="
+    print(
+        f"Waiting for {option_type} entry: index {entry_rule} {INDEX_ENTRY}. "
+        f"Starting WebSocket..."
+    )
+
     existing_qty = get_position_qty(OPTIONS_SYMBOL)
     if existing_qty != 0:
         raise SystemExit(f"Aborting: Position already open for {OPTIONS_SYMBOL} ({existing_qty} qty).")
-
-    print(f"Waiting for index entry at {INDEX_ENTRY}. Starting WebSocket...")
 
     fyers_ws = data_ws.FyersDataSocket(
         access_token=WS_ACCESS_TOKEN,
