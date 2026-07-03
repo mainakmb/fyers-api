@@ -155,11 +155,17 @@ python -m unittest discover -s tests -v
 
 Tests cover config loading only. They do not call the live API.
 
+Execution logs and FYERS SDK logs are written under `logs/`:
+- `logs/buy-executions.jsonl` / `logs/sell-executions.jsonl` — trade execution records
+- `logs/fyersApi.log` / `logs/fyersRequests.log` — FYERS SDK logs
+
 ## Project layout
 
 ```
 ├── buy.py              # Index-triggered market buy entry
 ├── sell.py             # WebSocket monitor and exit logic
+├── execution_log.py    # Shared buy/sell execution logging
+├── logs/               # All runtime logs (gitignored)
 ├── auth.py             # OAuth token generation helper
 ├── test-api.py         # API connectivity smoke test
 ├── .env.buy.example    # Example config for buy.py

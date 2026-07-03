@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from fyers_apiv3 import fyersModel
 from fyers_apiv3.FyersWebsocket import data_ws
 
+from execution_log import FYERS_LOG_PATH, log_execution
+
 SYMBOL_MASTER_BASE_URL = "https://public.fyers.in/sym_details"
 SYMBOL_MASTER_FILES = {
     ("NSE", "FO"): "NSE_FO",
@@ -47,7 +49,7 @@ print(
     f"entry={INDEX_ENTRY}, lots={ORDER_LOTS}, product={PRODUCT_TYPE}"
 )
 
-fyers_rest = fyersModel.FyersModel(client_id=APP_ID, token=ACCESS_TOKEN, is_async=False, log_path="")
+fyers_rest = fyersModel.FyersModel(client_id=APP_ID, token=ACCESS_TOKEN, is_async=False, log_path=FYERS_LOG_PATH)
 
 
 def _symbol_master_key(symbol):
@@ -100,12 +102,13 @@ def get_position_qty(symbol):
     return 0
 
 
-def market_buy_option():
+def market_buy_option(trigger_context=None):
     """Place a market buy order for the configured option contract."""
     global is_entered
     if is_entered:
         return
 
+    trigger_context = trigger_context or {}
     order_data = {
         "symbol": OPTIONS_SYMBOL,
         "qty": order_qty,
@@ -121,7 +124,23 @@ def market_buy_option():
 
     print(f"Placing market buy for {order_qty} x {OPTIONS_SYMBOL} ({ORDER_LOTS} lot(s))...")
     response = fyers_rest.place_order(data=order_data)
-    print("Execution Response:", response)
+
+    log_execution(
+        fyers_rest,
+        script="buy",
+        action="BUY",
+        order_request=order_data,
+        place_response=response,
+        context={
+            "index_symbol": INDEX_SYMBOL,
+            "index_entry": INDEX_ENTRY,
+            "option_type": trigger_context.get("option_type"),
+            "index_price": trigger_context.get("index_price"),
+            "trigger_reason": trigger_context.get("trigger_reason"),
+            "order_lots": ORDER_LOTS,
+            "lot_size": lot_size,
+        },
+    )
 
     if response and response.get("s") == "ok":
         is_entered = True
@@ -182,24 +201,31 @@ def on_message(message):
             entry_triggered_at = None
         return
 
+    entry_rule = "<=" if option_type == "CE" else ">="
+    trigger_context = {
+        "option_type": option_type,
+        "index_price": current_index_price,
+        "trigger_reason": f"{option_type} entry: index {entry_rule} {INDEX_ENTRY}",
+    }
+
     if ENTRY_DELAY_SECONDS <= 0:
         print(
             f"{option_type} entry hit at index {current_index_price} "
-            f"(rule: {'<=' if option_type == 'CE' else '>='} {INDEX_ENTRY}). Buying at market."
+            f"(rule: {entry_rule} {INDEX_ENTRY}). Buying at market."
         )
-        market_buy_option()
+        market_buy_option(trigger_context)
         return
 
     if entry_triggered_at is None:
         entry_triggered_at = time.time()
         print(
             f"{option_type} entry hit at {current_index_price} "
-            f"(rule: {'<=' if option_type == 'CE' else '>='} {INDEX_ENTRY}). "
+            f"(rule: {entry_rule} {INDEX_ENTRY}). "
             f"Waiting {ENTRY_DELAY_SECONDS}s before market buy..."
         )
     elif time.time() - entry_triggered_at >= ENTRY_DELAY_SECONDS:
         print(f"Entry delay complete at index {current_index_price}. Buying at market.")
-        market_buy_option()
+        market_buy_option(trigger_context)
 
 
 def on_error(message):
@@ -241,7 +267,7 @@ if __name__ == "__main__":
 
     fyers_ws = data_ws.FyersDataSocket(
         access_token=WS_ACCESS_TOKEN,
-        log_path="",
+        log_path=FYERS_LOG_PATH,
         litemode=True,
         write_to_file=False,
         reconnect=True,

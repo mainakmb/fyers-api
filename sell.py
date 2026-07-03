@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from fyers_apiv3 import fyersModel
 from fyers_apiv3.FyersWebsocket import data_ws
 
+from execution_log import FYERS_LOG_PATH, log_execution
+
 # --- 1. CONFIGURATION ---
 load_dotenv(Path(__file__).with_name(".env.sell"))
 
@@ -30,7 +32,7 @@ current_position_qty = 0  # ✅ Local tracking to eliminate REST API latency on 
 
 print(f"Using config -> symbol={INDEX_SYMBOL}, SL={INDEX_STOP_LOSS}, Target={INDEX_TARGET}, Product={PRODUCT_TYPE}")
 
-fyers_rest = fyersModel.FyersModel(client_id=APP_ID, token=ACCESS_TOKEN, is_async=False, log_path="")
+fyers_rest = fyersModel.FyersModel(client_id=APP_ID, token=ACCESS_TOKEN, is_async=False, log_path=FYERS_LOG_PATH)
 
 def get_position_qty(symbol):
     """Fetch current open quantity for the option contract at startup."""
@@ -44,15 +46,17 @@ def get_position_qty(symbol):
         print(f"Error fetching position size: {e}")
     return 0
 
-def market_exit_option():
+def market_exit_option(trigger_context=None):
     """Fires a market order instantly using locally cached position size."""
     global is_exited, current_position_qty
     if is_exited or current_position_qty == 0:
         return
 
+    trigger_context = trigger_context or {}
     # Determine exit side locally
     exit_side = -1 if current_position_qty > 0 else 1
     abs_qty = abs(current_position_qty)
+    action = "SELL" if exit_side == -1 else "BUY"
 
     order_data = {
         "symbol": OPTIONS_SYMBOL,
@@ -69,8 +73,23 @@ def market_exit_option():
 
     print(f"⚡ CRITICAL: Firing Market Order to close option position: {abs_qty} Qty...")
     response = fyers_rest.place_order(data=order_data)
-    print("Execution Response:", response)
-    
+
+    log_execution(
+        fyers_rest,
+        script="sell",
+        action=action,
+        order_request=order_data,
+        place_response=response,
+        context={
+            "index_symbol": INDEX_SYMBOL,
+            "index_stop_loss": INDEX_STOP_LOSS,
+            "index_target": INDEX_TARGET,
+            "index_price": trigger_context.get("index_price"),
+            "trigger_reason": trigger_context.get("trigger_reason"),
+            "position_qty_before_exit": current_position_qty,
+        },
+    )
+
     is_exited = True
 
 # --- 3. WEBSOCKET CALLBACKS ---
@@ -104,7 +123,12 @@ def on_message(message):
         # 1. IMMEDIATE STOP-LOSS (Zero Latency Execution)
         if sl_triggered:
             print(f"🛑 STOP LOSS HIT! Index: {current_index_price}. Exiting instantly.")
-            market_exit_option()
+            market_exit_option(
+                {
+                    "index_price": current_index_price,
+                    "trigger_reason": "stop_loss",
+                }
+            )
             return
 
         # 2. ROBUST TARGET MECHANISM
@@ -114,7 +138,12 @@ def on_message(message):
                 print(f"🎯 Target hit at {current_index_price}. Holding premium float for {EXIT_DELAY_SECONDS}s...")
             elif time.time() - target_triggered_at >= EXIT_DELAY_SECONDS:
                 print(f"⏱️ Float time complete. Executing Target Exit at {current_index_price}!")
-                market_exit_option()
+                market_exit_option(
+                    {
+                        "index_price": current_index_price,
+                        "trigger_reason": "target",
+                    }
+                )
         else:
             # ✅ RECOVERY: If price falls back out of target zone before the 2 seconds expire, reset!
             if target_triggered_at is not None:
@@ -143,7 +172,7 @@ if __name__ == "__main__":
         
         fyers_ws = data_ws.FyersDataSocket(
             access_token=WS_ACCESS_TOKEN,
-            log_path="",
+            log_path=FYERS_LOG_PATH,
             litemode=True,  
             write_to_file=False,
             reconnect=True,

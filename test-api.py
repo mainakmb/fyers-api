@@ -1,7 +1,10 @@
 import os
 
 from pathlib import Path
+
 from fyers_apiv3 import fyersModel
+
+from execution_log import FYERS_LOG_PATH
 
 # --- 1. CONFIGURATION ---
 APP_ID = "E3J29EV658-200"          # e.g., "XCXXXXXXxx-100"
@@ -17,7 +20,7 @@ fyers = fyersModel.FyersModel(
     client_id=APP_ID, 
     token=ACCESS_TOKEN, 
     is_async=False, 
-    log_path=""
+    log_path=FYERS_LOG_PATH,
 )
 
 # --- 3. TEST CONNECTIVITY ---
