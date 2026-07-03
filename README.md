@@ -1,35 +1,61 @@
 # FYERS Options Trading Scripts
 
-Python scripts that monitor a live index price over the FYERS WebSocket and place market orders on options contracts.
+Local Python scripts that watch a live index over the FYERS WebSocket and place market orders on options contracts.
 
-- **`buy.py`** — enters a position when the index hits an entry level
-- **`sell.py`** — exits an open position on stop-loss or target levels
+| Script | Purpose |
+|--------|---------|
+| `buy.py` | Enter a position when the index hits an entry level |
+| `sell.py` | Exit an open position on stop-loss or target levels |
+
+These scripts are intended for **local execution only** — run them from your machine during market hours.
+
+## Quick start
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install fyers-apiv3 python-dotenv
+
+python auth.py
+cp .env.buy.example .env.buy
+cp .env.sell.example .env.sell
+# Edit .env.buy and .env.sell for today's symbols and levels
+
+python test-api.py   # verify token
+python buy.py        # wait for entry
+python sell.py       # manage exit after position is open
+```
 
 ## How it works
 
-### Sell (`sell.py`)
-
-1. Verifies an open position exists for the configured option symbol.
-2. Subscribes to real-time ticks for the index symbol.
-3. Evaluates exit rules on each tick:
-   - **Stop-loss** — exits immediately when the index crosses the SL level.
-   - **Target** — when the index first crosses the target, waits briefly (premium float), then exits with a market order.
-
-| Option | Stop-loss triggers when | Target triggers when |
-|--------|-------------------------|----------------------|
-| CE (call) | Index ≤ SL | Index ≥ target |
-| PE (put)  | Index ≥ SL | Index ≤ target |
-
 ### Buy (`buy.py`)
 
-1. Confirms no open position exists for the option symbol.
-2. Subscribes to real-time index ticks.
-3. Places a **market buy** when the index crosses `INDEX_ENTRY`.
+1. Loads config from `.env.buy`.
+2. Aborts if a position already exists for `OPTIONS_SYMBOL`.
+3. Subscribes to `INDEX_SYMBOL` over WebSocket.
+4. Places a **market buy** when the index crosses `INDEX_ENTRY`.
 
 | Option | Buy triggers when |
 |--------|-------------------|
 | CE | Index ≥ `INDEX_ENTRY` |
 | PE | Index ≤ `INDEX_ENTRY` |
+
+Optional `ENTRY_DELAY_SECONDS` holds the order briefly after the trigger. If price retraces out of the entry zone before the delay expires, the timer resets.
+
+### Sell (`sell.py`)
+
+1. Loads config from `.env.sell`.
+2. Aborts if no open position exists for `OPTIONS_SYMBOL`.
+3. Subscribes to `INDEX_SYMBOL` over WebSocket.
+4. Exits with a **market order** on stop-loss or target.
+
+| Option | Stop-loss triggers when | Target triggers when |
+|--------|-------------------------|----------------------|
+| CE | Index ≤ SL | Index ≥ target |
+| PE | Index ≥ SL | Index ≤ target |
+
+- **Stop-loss** — fires immediately.
+- **Target** — waits `EXIT_DELAY_SECONDS` (premium float) after the target is hit, then exits. If price retraces out of the target zone before the delay expires, the timer resets.
 
 ## Prerequisites
 
@@ -48,17 +74,19 @@ pip install fyers-apiv3 python-dotenv
 
 ### 2. Authenticate
 
-Generate a daily access token using `auth.py`:
+Generate a daily access token:
 
 ```bash
 python auth.py
 ```
 
-Complete the browser login flow and paste the `auth_code` when prompted. On success, the access token is written automatically to `auth` in the project root (gitignored).
+Complete the browser login flow and paste the `auth_code` when prompted. On success, the token is saved to `auth` in the project root (gitignored).
+
+Scripts read the token from `auth` first, then fall back to `FYERS_ACCESS_TOKEN` if the file is missing.
 
 ### 3. Configure environment files
 
-Each script uses its own env file. Copy the examples and edit for your session:
+Each script loads its own env file:
 
 ```bash
 cp .env.buy.example .env.buy
@@ -103,29 +131,27 @@ python test-api.py
 python buy.py
 ```
 
-Aborts if a position already exists. After a successful buy, stops placing new orders.
-
 **Exit:**
 
 ```bash
 python sell.py
 ```
 
-Aborts if no open position is found. Runs until an exit is triggered or the process is stopped.
-
-Typical flow: run `buy.py` for entry, then `sell.py` to manage exits.
+Typical flow: run `buy.py` for entry, then `sell.py` in a separate terminal to manage the exit.
 
 ## Operational notes
 
-### The access token lifecycle
+### Daily token refresh
 
-FYERS access tokens expire daily. If you generated your `auth` file token today, it will not work tomorrow morning. Re-run `python auth.py` each morning after 8:00 AM to generate a fresh token.
+FYERS access tokens expire daily. Re-run `python auth.py` each morning after 8:00 AM to generate a fresh token before trading.
 
 ## Tests
 
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+Tests cover config loading only. They do not call the live API.
 
 ## Project layout
 
@@ -136,6 +162,7 @@ python -m unittest discover -s tests -v
 ├── test-api.py         # API connectivity smoke test
 ├── .env.buy.example    # Example config for buy.py
 ├── .env.sell.example   # Example config for sell.py
+├── .gitignore
 └── tests/
 ```
 
