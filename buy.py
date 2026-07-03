@@ -1,10 +1,23 @@
+import json
 import os
 import time
 from pathlib import Path
+from urllib.request import urlopen
 
 from dotenv import load_dotenv
 from fyers_apiv3 import fyersModel
 from fyers_apiv3.FyersWebsocket import data_ws
+
+SYMBOL_MASTER_BASE_URL = "https://public.fyers.in/sym_details"
+SYMBOL_MASTER_FILES = {
+    ("NSE", "FO"): "NSE_FO",
+    ("NSE", "CM"): "NSE_CM",
+    ("NSE", "CD"): "NSE_CD",
+    ("NSE", "COM"): "NSE_COM",
+    ("BSE", "FO"): "BSE_FO",
+    ("BSE", "CM"): "BSE_CM",
+    ("MCX", "COM"): "MCX_COM",
+}
 
 # --- 1. CONFIGURATION ---
 load_dotenv(Path(__file__).with_name(".env.buy"))
@@ -18,7 +31,7 @@ WS_ACCESS_TOKEN = f"{APP_ID}:{ACCESS_TOKEN}"
 INDEX_SYMBOL = os.getenv("INDEX_SYMBOL", "NSE:NIFTY50-INDEX")
 OPTIONS_SYMBOL = os.getenv("OPTIONS_SYMBOL", "BSE:SENSEX2670277100PE").upper()
 PRODUCT_TYPE = os.getenv("PRODUCT_TYPE", "INTRADAY").upper()
-ORDER_QTY = int(os.getenv("ORDER_QTY", "1"))
+ORDER_LOTS = int(os.getenv("ORDER_LOTS", "1"))
 
 # Index level that triggers a market buy on the option contract
 INDEX_ENTRY = float(os.getenv("INDEX_ENTRY", "24100.0"))
@@ -26,13 +39,52 @@ INDEX_ENTRY = float(os.getenv("INDEX_ENTRY", "24100.0"))
 is_entered = False
 entry_triggered_at = None
 ENTRY_DELAY_SECONDS = float(os.getenv("ENTRY_DELAY_SECONDS", "0"))
+order_qty = 0
+lot_size = 0
 
 print(
     f"Using config -> index={INDEX_SYMBOL}, option={OPTIONS_SYMBOL}, "
-    f"entry={INDEX_ENTRY}, qty={ORDER_QTY}, product={PRODUCT_TYPE}"
+    f"entry={INDEX_ENTRY}, lots={ORDER_LOTS}, product={PRODUCT_TYPE}"
 )
 
 fyers_rest = fyersModel.FyersModel(client_id=APP_ID, token=ACCESS_TOKEN, is_async=False, log_path="")
+
+
+def _symbol_master_key(symbol):
+    """Map a FYERS symbol to the public symbol master file name."""
+    exchange = symbol.split(":", 1)[0]
+    if exchange == "MCX":
+        return "MCX_COM"
+    if "CE" in symbol or "PE" in symbol or "FUT" in symbol:
+        return SYMBOL_MASTER_FILES[(exchange, "FO")]
+    return SYMBOL_MASTER_FILES[(exchange, "CM")]
+
+
+def get_lot_size(symbol):
+    """Fetch the exchange lot size for a symbol from FYERS symbol master."""
+    master_key = _symbol_master_key(symbol)
+    url = f"{SYMBOL_MASTER_BASE_URL}/{master_key}_sym_master.json"
+    with urlopen(url, timeout=30) as response:
+        master_data = json.loads(response.read().decode("utf-8"))
+
+    symbol_data = master_data.get(symbol)
+    if not symbol_data:
+        raise ValueError(f"Symbol {symbol} not found in {master_key} symbol master")
+
+    lot_size = int(symbol_data.get("minLotSize", 0))
+    if lot_size <= 0:
+        raise ValueError(f"Invalid lot size returned for {symbol}")
+
+    return lot_size
+
+
+def resolve_order_qty(symbol, lots):
+    """Return order quantity for the requested number of lots."""
+    if lots <= 0:
+        raise ValueError("ORDER_LOTS must be greater than 0")
+
+    per_lot_qty = get_lot_size(symbol)
+    return per_lot_qty, per_lot_qty * lots
 
 
 def get_position_qty(symbol):
@@ -56,7 +108,7 @@ def market_buy_option():
 
     order_data = {
         "symbol": OPTIONS_SYMBOL,
-        "qty": ORDER_QTY,
+        "qty": order_qty,
         "type": 2,  # Market order
         "side": 1,  # Buy
         "productType": PRODUCT_TYPE,
@@ -67,7 +119,7 @@ def market_buy_option():
         "offlineOrder": False,
     }
 
-    print(f"Placing market buy for {ORDER_QTY} x {OPTIONS_SYMBOL}...")
+    print(f"Placing market buy for {order_qty} x {OPTIONS_SYMBOL} ({ORDER_LOTS} lot(s))...")
     response = fyers_rest.place_order(data=order_data)
     print("Execution Response:", response)
 
@@ -144,8 +196,12 @@ def on_open():
 
 
 if __name__ == "__main__":
-    if ORDER_QTY <= 0:
-        raise SystemExit("Aborting: ORDER_QTY must be greater than 0.")
+    try:
+        lot_size, order_qty = resolve_order_qty(OPTIONS_SYMBOL, ORDER_LOTS)
+    except (OSError, ValueError, KeyError) as exc:
+        raise SystemExit(f"Aborting: unable to resolve lot size for {OPTIONS_SYMBOL}: {exc}") from exc
+
+    print(f"Resolved lot size={lot_size}, order_qty={order_qty}")
 
     existing_qty = get_position_qty(OPTIONS_SYMBOL)
     if existing_qty != 0:

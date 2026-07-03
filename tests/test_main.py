@@ -17,7 +17,7 @@ class BuyConfigTests(unittest.TestCase):
                 "INDEX_SYMBOL": "NSE:NIFTY",
                 "OPTIONS_SYMBOL": "NSE:NIFTY25000CE",
                 "INDEX_ENTRY": "75000",
-                "ORDER_QTY": "5",
+                "ORDER_LOTS": "2",
             },
             clear=False,
         ):
@@ -27,7 +27,7 @@ class BuyConfigTests(unittest.TestCase):
             self.assertEqual(buy.INDEX_SYMBOL, "NSE:NIFTY")
             self.assertEqual(buy.OPTIONS_SYMBOL, "NSE:NIFTY25000CE")
             self.assertEqual(buy.INDEX_ENTRY, 75000.0)
-            self.assertEqual(buy.ORDER_QTY, 5)
+            self.assertEqual(buy.ORDER_LOTS, 2)
 
 
 class SellConfigTests(unittest.TestCase):

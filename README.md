@@ -33,7 +33,7 @@ python sell.py       # manage exit after position is open
 1. Loads config from `.env.buy`.
 2. Aborts if a position already exists for `OPTIONS_SYMBOL`.
 3. Subscribes to `INDEX_SYMBOL` over WebSocket.
-4. Places a **market buy** when the index crosses `INDEX_ENTRY`.
+4. Fetches lot size from the FYERS symbol master API and places a **market buy** for `ORDER_LOTS` lot(s) when the index crosses `INDEX_ENTRY`.
 
 | Option | Buy triggers when |
 |--------|-------------------|
@@ -100,7 +100,7 @@ cp .env.sell.example .env.sell
 | `INDEX_SYMBOL` | Index to monitor | `NSE:NIFTY50-INDEX` |
 | `OPTIONS_SYMBOL` | Option contract to buy | `BSE:SENSEX2670277100PE` |
 | `INDEX_ENTRY` | Index level that triggers the buy | `24100.0` |
-| `ORDER_QTY` | Option quantity to buy | `1` |
+| `ORDER_LOTS` | Number of lots to buy (qty = API lot size × lots) | `1` |
 | `PRODUCT_TYPE` | FYERS product type | `INTRADAY` |
 | `ENTRY_DELAY_SECONDS` | Hold time after entry trigger (0 = immediate) | `0` |
 
