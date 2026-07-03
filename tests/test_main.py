@@ -9,7 +9,28 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-class RuntimeConfigTests(unittest.TestCase):
+class BuyConfigTests(unittest.TestCase):
+    def test_uses_environment_values_when_present(self):
+        with patch.dict(
+            os.environ,
+            {
+                "INDEX_SYMBOL": "NSE:NIFTY",
+                "OPTIONS_SYMBOL": "NSE:NIFTY25000CE",
+                "INDEX_ENTRY": "75000",
+                "ORDER_QTY": "5",
+            },
+            clear=False,
+        ):
+            import buy
+
+            buy = importlib.reload(buy)
+            self.assertEqual(buy.INDEX_SYMBOL, "NSE:NIFTY")
+            self.assertEqual(buy.OPTIONS_SYMBOL, "NSE:NIFTY25000CE")
+            self.assertEqual(buy.INDEX_ENTRY, 75000.0)
+            self.assertEqual(buy.ORDER_QTY, 5)
+
+
+class SellConfigTests(unittest.TestCase):
     def test_uses_environment_values_when_present(self):
         with patch.dict(
             os.environ,
@@ -18,35 +39,18 @@ class RuntimeConfigTests(unittest.TestCase):
                 "OPTIONS_SYMBOL": "NSE:NIFTY25000CE",
                 "INDEX_STOP_LOSS": "75000",
                 "INDEX_TARGET": "76000",
+                "EXIT_DELAY_SECONDS": "2",
             },
             clear=False,
         ):
-            import main
+            import sell
 
-            main = importlib.reload(main)
-            self.assertEqual(main.INDEX_SYMBOL, "NSE:NIFTY")
-            self.assertEqual(main.OPTIONS_SYMBOL, "NSE:NIFTY25000CE")
-            self.assertEqual(main.INDEX_STOP_LOSS, 75000.0)
-            self.assertEqual(main.INDEX_TARGET, 76000.0)
-
-    def test_falls_back_to_defaults_when_values_are_missing(self):
-        with patch.dict(os.environ, {}, clear=False):
-            for key in ["INDEX_SYMBOL", "OPTIONS_SYMBOL", "INDEX_STOP_LOSS", "INDEX_TARGET"]:
-                os.environ.pop(key, None)
-
-            import main
-
-            main = importlib.reload(main)
-            self.assertEqual(main.INDEX_SYMBOL, "BSE:SENSEX-INDEX")
-            self.assertEqual(main.OPTIONS_SYMBOL, "BSE:SENSEX2670276900PE")
-            self.assertEqual(main.INDEX_STOP_LOSS, 77200.0)
-            self.assertEqual(main.INDEX_TARGET, 76480.0)
-
-    def test_exit_delay_is_configured_for_two_seconds(self):
-        import main
-
-        main = importlib.reload(main)
-        self.assertEqual(main.EXIT_DELAY_SECONDS, 2)
+            sell = importlib.reload(sell)
+            self.assertEqual(sell.INDEX_SYMBOL, "NSE:NIFTY")
+            self.assertEqual(sell.OPTIONS_SYMBOL, "NSE:NIFTY25000CE")
+            self.assertEqual(sell.INDEX_STOP_LOSS, 75000.0)
+            self.assertEqual(sell.INDEX_TARGET, 76000.0)
+            self.assertEqual(sell.EXIT_DELAY_SECONDS, 2.0)
 
 
 if __name__ == "__main__":

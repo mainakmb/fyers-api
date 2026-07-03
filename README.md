@@ -1,29 +1,40 @@
-# FYERS Options Exit Monitor
+# FYERS Options Trading Scripts
 
-A Python script that monitors a live index price over the FYERS WebSocket and automatically squares off an open options position when index-based stop-loss or target levels are hit.
+Python scripts that monitor a live index price over the FYERS WebSocket and place market orders on options contracts.
 
-The script does **not** place entry orders. Open your position manually (or via another tool), then run this monitor to manage exits.
+- **`buy.py`** — enters a position when the index hits an entry level
+- **`sell.py`** — exits an open position on stop-loss or target levels
 
 ## How it works
 
+### Sell (`sell.py`)
+
 1. Verifies an open position exists for the configured option symbol.
-2. Subscribes to real-time ticks for the index symbol (e.g. `BSE:SENSEX-INDEX`).
+2. Subscribes to real-time ticks for the index symbol.
 3. Evaluates exit rules on each tick:
    - **Stop-loss** — exits immediately when the index crosses the SL level.
-   - **Target** — when the index first crosses the target, waits 2 seconds (premium float), then exits with a market order even if price bounces back.
-
-Exit direction is inferred from the option symbol suffix (`CE` or `PE`):
+   - **Target** — when the index first crosses the target, waits briefly (premium float), then exits with a market order.
 
 | Option | Stop-loss triggers when | Target triggers when |
 |--------|-------------------------|----------------------|
 | CE (call) | Index ≤ SL | Index ≥ target |
 | PE (put)  | Index ≥ SL | Index ≤ target |
 
+### Buy (`buy.py`)
+
+1. Confirms no open position exists for the option symbol.
+2. Subscribes to real-time index ticks.
+3. Places a **market buy** when the index crosses `INDEX_ENTRY`.
+
+| Option | Buy triggers when |
+|--------|-------------------|
+| CE | Index ≥ `INDEX_ENTRY` |
+| PE | Index ≤ `INDEX_ENTRY` |
+
 ## Prerequisites
 
 - Python 3.11+
 - A [FYERS](https://fyers.in/) trading account with API access
-- An active options position to monitor
 
 ## Setup
 
@@ -32,7 +43,7 @@ Exit direction is inferred from the option symbol suffix (`CE` or `PE`):
 ```bash
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install fyers-apiv3
+pip install fyers-apiv3 python-dotenv
 ```
 
 ### 2. Authenticate
@@ -45,73 +56,70 @@ python auth.py
 
 Complete the browser login flow and paste the `auth_code` when prompted. On success, the access token is written automatically to `auth` in the project root (gitignored).
 
-Alternatively, set `FYERS_ACCESS_TOKEN` instead of using the `auth` file:
+### 3. Configure environment files
+
+Each script uses its own env file. Copy the examples and edit for your session:
 
 ```bash
-export FYERS_ACCESS_TOKEN="your_access_token_here"
+cp .env.buy.example .env.buy
+cp .env.sell.example .env.sell
 ```
 
-### 3. Verify API connectivity
+**`.env.buy`** — entry settings:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `INDEX_SYMBOL` | Index to monitor | `NSE:NIFTY50-INDEX` |
+| `OPTIONS_SYMBOL` | Option contract to buy | `BSE:SENSEX2670277100PE` |
+| `INDEX_ENTRY` | Index level that triggers the buy | `24100.0` |
+| `ORDER_QTY` | Option quantity to buy | `1` |
+| `PRODUCT_TYPE` | FYERS product type | `INTRADAY` |
+| `ENTRY_DELAY_SECONDS` | Hold time after entry trigger (0 = immediate) | `0` |
+
+**`.env.sell`** — exit settings:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `INDEX_SYMBOL` | Index to monitor | `NSE:NIFTY50-INDEX` |
+| `OPTIONS_SYMBOL` | Option contract to square off | `BSE:SENSEX2670277100PE` |
+| `INDEX_STOP_LOSS` | Index level for immediate stop-loss exit | `24150.0` |
+| `INDEX_TARGET` | Index level for delayed target exit | `24036.0` |
+| `PRODUCT_TYPE` | FYERS product type | `INTRADAY` |
+| `EXIT_DELAY_SECONDS` | Premium float delay before target exit | `1` |
+
+Update `OPTIONS_SYMBOL` to match your current expiry and strike before each session.
+
+### 4. Verify API connectivity
 
 ```bash
 python test-api.py
 ```
 
-This checks your profile and available margin without placing any orders.
+## Running
 
-## Configuration
-
-All runtime settings are controlled via environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `FYERS_ACCESS_TOKEN` | FYERS access token (if not using `auth` file) | — |
-| `INDEX_SYMBOL` | Index to monitor for exit triggers | `BSE:SENSEX-INDEX` |
-| `OPTIONS_SYMBOL` | Option contract to square off | `BSE:SENSEX2670276900PE` |
-| `INDEX_STOP_LOSS` | Index level for immediate stop-loss exit | `77200.0` |
-| `INDEX_TARGET` | Index level for delayed target exit | `76480.0` |
-
-Example:
+**Entry:**
 
 ```bash
-export INDEX_SYMBOL="BSE:SENSEX-INDEX"
-export OPTIONS_SYMBOL="BSE:SENSEX2670276900PE"
-export INDEX_STOP_LOSS="77200.0"
-export INDEX_TARGET="76480.0"
-python main.py
+python buy.py
 ```
 
-Update `OPTIONS_SYMBOL` to match your current expiry and strike before each session.
+Aborts if a position already exists. After a successful buy, stops placing new orders.
 
-> **Note:** Exit orders use `productType: "MARGIN"`. If your position is intraday, change this in `main.py` to `"INTRADAY"`.
-
-## Running the monitor
+**Exit:**
 
 ```bash
-python main.py
+python sell.py
 ```
 
-The script aborts safely if no open position is found for `OPTIONS_SYMBOL`. Once running, it stays connected via WebSocket until an exit is triggered or the process is stopped.
+Aborts if no open position is found. Runs until an exit is triggered or the process is stopped.
 
-## GitHub Actions
-
-The workflow in `.github/workflows/fyers-trading.yml` can be triggered manually from the Actions tab. It accepts the same configuration inputs as environment variables and runs tests, connectivity checks, and the trading script.
-
-Required secret:
-
-- `FYERS_ACCESS_TOKEN` — add under **Settings → Secrets and variables → Actions**
-
-Use with care: the workflow will attempt a real market exit if an open position exists.
+Typical flow: run `buy.py` for entry, then `sell.py` to manage exits.
 
 ## Operational notes
 
 ### The access token lifecycle
 
-FYERS access tokens expire daily. If you generated your `auth` file token today, it will not work tomorrow morning. You will need to manually log in, generate a fresh `ACCESS_TOKEN` tomorrow morning post 8:00 AM, and push that updated token to your GitHub repository secrets or your deployment environment.
-
-### The 6-hour wall
-
-Since you are trading BSE Sensex options, remember that if your trade lasts the entire day, GitHub Actions will forcefully kill your runner after 6 hours of continuous execution. Keep an eye on your dashboard near market close to ensure it hasn't timed out.
+FYERS access tokens expire daily. If you generated your `auth` file token today, it will not work tomorrow morning. Re-run `python auth.py` each morning after 8:00 AM to generate a fresh token.
 
 ## Tests
 
@@ -119,21 +127,21 @@ Since you are trading BSE Sensex options, remember that if your trade lasts the 
 python -m unittest discover -s tests -v
 ```
 
-Tests cover configuration loading and defaults. They do not hit the live API.
-
 ## Project layout
 
 ```
-├── main.py          # WebSocket monitor and exit logic
-├── auth.py          # OAuth token generation helper
-├── test-api.py      # API connectivity smoke test
-├── tests/           # Unit tests
-└── .github/workflows/fyers-trading.yml
+├── buy.py              # Index-triggered market buy entry
+├── sell.py             # WebSocket monitor and exit logic
+├── auth.py             # OAuth token generation helper
+├── test-api.py         # API connectivity smoke test
+├── .env.buy.example    # Example config for buy.py
+├── .env.sell.example   # Example config for sell.py
+└── tests/
 ```
 
 ## Safety
 
-- This script places **real market orders** against your FYERS account.
-- Always confirm `OPTIONS_SYMBOL`, SL, and target levels before starting.
+- These scripts place **real market orders** against your FYERS account.
+- Always confirm `OPTIONS_SYMBOL`, entry, SL, and target levels before starting.
 - Run `test-api.py` first to verify your token is valid.
-- Never commit `auth`, `.env`, or API secrets to version control.
+- Never commit `auth`, `.env.buy`, `.env.sell`, or API secrets to version control.

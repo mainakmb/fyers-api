@@ -6,7 +6,7 @@ from fyers_apiv3 import fyersModel
 from fyers_apiv3.FyersWebsocket import data_ws
 
 # --- 1. CONFIGURATION ---
-load_dotenv(Path(__file__).with_name(".env"))
+load_dotenv(Path(__file__).with_name(".env.sell"))
 
 APP_ID = "E3J29EV658-200"          
 AUTH_FILE = Path(__file__).with_name("auth")
@@ -25,7 +25,7 @@ INDEX_TARGET = float(os.getenv("INDEX_TARGET", "24036.0"))
 # Global tracking flags
 is_exited = False
 target_triggered_at = None  
-EXIT_DELAY_SECONDS = 1
+EXIT_DELAY_SECONDS = float(os.getenv("EXIT_DELAY_SECONDS", "1"))
 current_position_qty = 0  # ✅ Local tracking to eliminate REST API latency on exit
 
 print(f"Using config -> symbol={INDEX_SYMBOL}, SL={INDEX_STOP_LOSS}, Target={INDEX_TARGET}, Product={PRODUCT_TYPE}")

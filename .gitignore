@@ -1,9 +1,43 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
-*.log
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment and secrets
 .env
+.env.buy
+.env.sell
 .env.*
-!.env.example
-.DS_Store
+!.env.buy.example
+!.env.sell.example
 auth
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# FYERS SDK / local runtime
+fyersApi.log
+fyersRequests.log
