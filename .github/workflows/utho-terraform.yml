@@ -1,0 +1,60 @@
+name: Provision Utho Trading Bot
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/utho-terraform-provision
+      - main
+    paths:
+      - "terraform/**"
+      - ".github/workflows/utho-terraform.yml"
+
+env:
+  TF_WORKING_DIR: terraform
+
+jobs:
+  terraform:
+    name: Terraform Init & Apply
+    runs-on: ubuntu-latest
+    environment: production
+
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Cache Terraform state
+        uses: actions/cache@v4
+        with:
+          path: |
+            terraform/.terraform
+            terraform/.terraform.lock.hcl
+            terraform/terraform.tfstate
+            terraform/terraform.tfstate.backup
+          key: terraform-utho-${{ github.ref }}
+          restore-keys: |
+            terraform-utho-
+
+      - name: Terraform Init
+        run: terraform init
+        env:
+          TF_VAR_utho_api_token: ${{ secrets.UTHO_API_TOKEN }}
+          TF_VAR_root_password: ${{ secrets.UTHO_ROOT_PASSWORD }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        env:
+          TF_VAR_utho_api_token: ${{ secrets.UTHO_API_TOKEN }}
+          TF_VAR_root_password: ${{ secrets.UTHO_ROOT_PASSWORD }}
+
+      - name: Show outputs
+        run: terraform output
