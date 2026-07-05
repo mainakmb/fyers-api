@@ -18,8 +18,8 @@ if [[ -z "${TOKEN}" ]]; then
   exit 1
 fi
 
-echo "Updating FYERS_ACCESS_TOKEN secret on ${REPO}..."
-gh secret set FYERS_ACCESS_TOKEN --repo "${REPO}" --body "${TOKEN}"
+echo "Updating FYERS_ACCESS_TOKEN secret on ${REPO} (production environment)..."
+gh secret set FYERS_ACCESS_TOKEN --env production --repo "${REPO}" --body "${TOKEN}"
 
 echo "Triggering workflow ${WORKFLOW}..."
 gh workflow run "${WORKFLOW}" --repo "${REPO}"

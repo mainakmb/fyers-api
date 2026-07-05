@@ -48,9 +48,37 @@ GitHub Actions
 
 **First-time setup**
 
-1. Add secrets under **Settings → Environments → production** (see [docs/DAILY_WORKFLOW.md](docs/DAILY_WORKFLOW.md))
-2. Run **Deploy Server** from the [Actions tab](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml)
-3. Run **Deploy App** from the [Actions tab](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml)
+1. Add **Environment secrets** under [Settings → Environments → production](https://github.com/mainakmb/fyers-api/settings/environments/production) (not repository secrets — both workflows use the `production` environment):
+
+   | Secret | Used by |
+   |--------|---------|
+   | `DIGITALOCEAN_TOKEN` | Deploy Server |
+   | `SSH_PRIVATE_KEY` | Both |
+   | `STATE_REPO_PAT` | Both |
+   | `FYERS_ACCESS_TOKEN` | Deploy App |
+   | `FYERS_APP_ID` | Deploy App |
+   | `FYERS_SECRET_KEY` | Deploy App |
+
+2. Run [**Deploy Server**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml) — provisions the droplet and syncs state to `mainakmb/tfstate-storage`
+3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — deploys code, writes FYERS secrets, starts `main.py` in tmux
+
+**Connect to the server**
+
+After **Deploy Server** succeeds, note the IP from the workflow **Show Outputs** step (`server_static_ip`), the [DigitalOcean dashboard](https://cloud.digitalocean.com/droplets), or remote state at `mainakmb/tfstate-storage/fyers-api/terraform.tfstate`.
+
+SSH as `root` with the **same private key** stored in `SSH_PRIVATE_KEY`:
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@YOUR_DROPLET_IP
+```
+
+```bash
+# Check the bot
+tmux list-sessions
+tmux attach -t trading_session          # detach: Ctrl+B, then D
+tail -f /root/trading-bot/logs/runner.log
+tail -f /root/trading-bot/logs/fyersApi.log
+```
 
 **Daily token refresh**
 
@@ -58,6 +86,8 @@ GitHub Actions
 python auth.py
 ./scripts/push-daily-token.sh
 ```
+
+This updates `FYERS_ACCESS_TOKEN` in the `production` environment and triggers **Deploy App**.
 
 **Destroy the droplet** — run **Deploy Server** manually with the **Destroy server** checkbox checked.
 
@@ -82,9 +112,8 @@ Optional `ENTRY_DELAY_SECONDS` holds the order briefly after the trigger. If pri
 ### Sell (`sell.py`)
 
 1. Loads secrets from `.env`, strategy from `.env.sell`.
-2. Aborts if no open position exists for `OPTIONS_SYMBOL`.
-3. Subscribes to `INDEX_SYMBOL` over WebSocket.
-4. Exits with a **market order** on stop-loss or target.
+2. Subscribes to `INDEX_SYMBOL` over WebSocket (runs even before a position exists so the server stays up after a fresh deploy).
+3. When a position is open, exits with a **market order** on stop-loss or target.
 
 | Option | Stop-loss triggers when | Target triggers when |
 |--------|-------------------------|----------------------|
@@ -174,7 +203,10 @@ Runtime logs are written under `logs/` (gitignored):
 - `logs/buy-executions.jsonl` / `logs/sell-executions.jsonl` — trade execution records
 - `logs/fyersApi.log` / `logs/fyersRequests.log` — FYERS SDK logs
 
-On the server: `/root/trading-bot/logs/`
+On the server (`/root/trading-bot/logs/`):
+
+- `runner.log` — stdout/stderr from `main.py` (useful when tmux exits on startup)
+- `fyersApi.log` — FYERS SDK logs
 
 ## Project layout
 
