@@ -38,12 +38,12 @@ Infrastructure and app deploy are split into two GitHub Actions workflows:
 | Workflow | What it does |
 |----------|----------------|
 | [**Deploy Server**](.github/workflows/deploy-server.yml) | Provisions a DigitalOcean droplet (`blr1`, 512MB + 1GB swap) and syncs Terraform state to [`mainakmb/tfstate-storage`](https://github.com/mainakmb/tfstate-storage) |
-| [**Deploy App**](.github/workflows/deploy-app.yml) | SSH deploys code to `/root/trading-bot/`, runs `test-api.py`, then starts `main.py` in a `tmux` session |
+| [**Deploy App**](.github/workflows/deploy-app.yml) | SSH deploys code to `/root/trading-bot/` and runs `test-api.py`; starts `main.py` in tmux only on a manual run with strategy side **buy** or **sell** |
 
 ```text
 GitHub Actions
   deploy-server.yml  →  DO droplet + tfstate sync
-  deploy-app.yml     →  /root/trading-bot/  (tmux: trading_session)
+  deploy-app.yml     →  /root/trading-bot/  (tmux only when buy/sell selected)
 ```
 
 **First-time setup**
@@ -183,13 +183,15 @@ cp .env.sell.example .env.sell
 | `PRODUCT_TYPE` | FYERS product type (`INTRADAY` or `MARGIN`) | `INTRADAY` |
 | `EXIT_DELAY_SECONDS` | Premium float delay before target exit | `1` |
 
-Update `OPTIONS_SYMBOL` to match your current expiry and strike before each session. On the server, edit `.env.buy.example` / `.env.sell.example` in this repo and push to `main` — **Deploy App** copies them on the next run.
+Update `OPTIONS_SYMBOL` to match your current expiry and strike before each session. On the server, edit `.env.buy.example` / `.env.sell.example` and push to `main` to sync strategy files (code + `test-api.py` only) — run **Deploy App** manually with **buy** or **sell** to go live.
 
 ### 4. Verify API connectivity
 
 ```bash
 python test-api.py
 ```
+
+Checks REST auth (`get_profile`, funds). It does not verify the live WebSocket feed — WebSocket errors (e.g. 504) outside market hours are normal.
 
 ## Tests
 
@@ -226,7 +228,7 @@ On the server (`/root/trading-bot/logs/`):
 ├── terraform/                   # DigitalOcean droplet (Terraform)
 ├── .github/workflows/
 │   ├── deploy-server.yml        # Provision / destroy droplet
-│   └── deploy-app.yml           # SSH code deploy + tmux
+│   └── deploy-app.yml           # SSH code deploy; tmux on buy/sell only
 ├── docs/
 │   └── DAILY_WORKFLOW.md        # Full CI/CD ops guide
 └── tests/
@@ -236,6 +238,7 @@ On the server (`/root/trading-bot/logs/`):
 
 - These scripts place **real market orders** against your FYERS account.
 - Always confirm `OPTIONS_SYMBOL`, entry, SL, and target levels before starting.
-- Run `test-api.py` first to verify your token is valid.
+- Run `test-api.py` first to verify your token is valid (REST only).
+- WebSocket 504 errors in `fyersApi.log` outside market hours (evenings/weekends) usually mean the FYERS feed is down — retry during live session.
 - Never commit `auth`, `.env`, `.env.buy`, `.env.sell`, Terraform state, or API secrets.
 - Remote state lives in the private repo `mainakmb/tfstate-storage` — not in this repo.
