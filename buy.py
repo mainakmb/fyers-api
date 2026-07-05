@@ -22,9 +22,10 @@ SYMBOL_MASTER_FILES = {
 }
 
 # --- 1. CONFIGURATION ---
+load_dotenv(Path(__file__).with_name(".env"))
 load_dotenv(Path(__file__).with_name(".env.buy"))
 
-APP_ID = "E3J29EV658-200"
+APP_ID = os.getenv("FYERS_APP_ID", "E3J29EV658-200")
 AUTH_FILE = Path(__file__).with_name("auth")
 
 ACCESS_TOKEN = AUTH_FILE.read_text(encoding="utf-8").strip() if AUTH_FILE.exists() else os.getenv("FYERS_ACCESS_TOKEN", "")
