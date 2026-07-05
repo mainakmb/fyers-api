@@ -1,4 +1,4 @@
-name: Terraform Deploy & Sync State
+name: Deploy Server
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - "terraform/**"
-      - ".github/workflows/deploy.yml"
+      - ".github/workflows/deploy-server.yml"
   workflow_dispatch:
 
 env:
@@ -16,7 +16,7 @@ env:
 
 jobs:
   terraform:
-    name: Terraform Apply
+    name: Provision DigitalOcean Droplet
     runs-on: ubuntu-latest
     environment: production
 
@@ -40,7 +40,7 @@ jobs:
           mkdir -p "${STATE_DIR}"
           if [ -f "${STATE_FILE}" ]; then
             cp "${STATE_FILE}" "${LOCAL_STATE}"
-            echo "Restored state from ${TF_STATE_REPO}/${{ env.TF_STATE_PROJECT }}/terraform.tfstate"
+            echo "Restored state from ${{ env.TF_STATE_REPO }}/${{ env.TF_STATE_PROJECT }}/terraform.tfstate"
           else
             echo "No existing state for ${{ env.TF_STATE_PROJECT }}; starting fresh."
           fi
@@ -50,7 +50,7 @@ jobs:
         with:
           terraform_version: "1.9.0"
 
-      - name: Prepare SSH Key for DigitalOcean
+      - name: Prepare SSH Key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
@@ -72,8 +72,29 @@ jobs:
             -var="pvt_key_path=${HOME}/.ssh/id_rsa"
 
       - name: Show Outputs
+        id: infra
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform output
+        run: |
+          echo "server_ip=$(terraform output -raw server_static_ip)" >> "$GITHUB_OUTPUT"
+          terraform output
+
+      - name: Wait for SSH and Cloud-Init
+        env:
+          SERVER_IP: ${{ steps.infra.outputs.server_ip }}
+        run: |
+          echo "Waiting for ${SERVER_IP} to accept SSH..."
+          for attempt in $(seq 1 36); do
+            if ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=10 -i ~/.ssh/id_rsa \
+              "root@${SERVER_IP}" "cloud-init status --wait >/dev/null 2>&1 || test -d /root"; then
+              echo "SSH ready on attempt ${attempt}"
+              exit 0
+            fi
+            echo "Attempt ${attempt}/36 — retrying in 10s..."
+            sleep 10
+          done
+          echo "Timed out waiting for SSH on ${SERVER_IP}"
+          exit 1
 
       - name: Stage Updated State for Sync
         if: always()

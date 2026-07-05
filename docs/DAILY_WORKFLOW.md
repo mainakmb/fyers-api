@@ -1,0 +1,104 @@
+# Daily Trading Bot Deploy Workflow
+
+Hands-free pipeline split into two workflows:
+
+- **`deploy-server.yml`** — provisions the DigitalOcean droplet and syncs Terraform state
+- **`deploy-app.yml`** — deploys Python code over SSH, writes FYERS secrets, and restarts the tmux session
+
+## Architecture
+
+```text
+deploy-server.yml
+  ├─ Terraform apply  →  $4 DO droplet (512MB + 1GB swap via cloud-init)
+  └─ State sync       →  mainakmb/tfstate-storage/fyers-api/terraform.tfstate
+
+deploy-app.yml
+  ├─ Read server IP   →  from remote tfstate (no re-provision)
+  └─ SSH deploy       →  /root/trading-bot/
+                           ├─ .env          (FYERS secrets, chmod 600)
+                           ├─ .env.buy      (entry strategy)
+                           ├─ .env.sell     (exit strategy)
+                           └─ tmux session  trading_session → python3 main.py
+```
+
+## Required GitHub Secrets
+
+Configure these under **Settings → Secrets and variables → Actions** (use the `production` environment if enabled):
+
+| Secret | Workflow |
+|--------|----------|
+| `DIGITALOCEAN_TOKEN` | Deploy Server |
+| `SSH_PRIVATE_KEY` | Both |
+| `STATE_REPO_PAT` | Both |
+| `FYERS_ACCESS_TOKEN` | Deploy App |
+| `FYERS_APP_ID` | Deploy App |
+| `FYERS_SECRET_KEY` | Deploy App |
+
+## Morning routine (refresh token + redeploy)
+
+### Option A — helper script (recommended)
+
+After generating a fresh token locally:
+
+```bash
+python auth.py
+chmod +x scripts/push-daily-token.sh
+./scripts/push-daily-token.sh
+```
+
+This updates `FYERS_ACCESS_TOKEN` and triggers `deploy-app.yml` via the GitHub CLI.
+
+### Option B — GitHub CLI commands
+
+```bash
+# 1. Update the secret from your local auth file
+gh secret set FYERS_ACCESS_TOKEN --repo mainakmb/fyers-api --body "$(tr -d '[:space:]' < auth)"
+
+# 2. Trigger the app deploy workflow manually
+gh workflow run deploy-app.yml --repo mainakmb/fyers-api
+
+# 3. Watch progress
+gh run watch --repo mainakmb/fyers-api
+```
+
+### Option C — API dispatch (for automation)
+
+```bash
+gh api repos/mainakmb/fyers-api/dispatches \
+  -f event_type=refresh-trading-token
+```
+
+Ensure `FYERS_ACCESS_TOKEN` is already updated before dispatching.
+
+## When each workflow runs
+
+| Workflow | Trigger |
+|----------|---------|
+| **Deploy Server** | Push to `main` changing `terraform/**`; manual dispatch |
+| **Deploy App** | Push to `main` changing `*.py`, `requirements.txt`, env examples; manual dispatch; `refresh-trading-token` dispatch |
+
+Run **Deploy Server** first on a fresh setup, then **Deploy App**. Daily token refreshes only need **Deploy App**.
+
+Updating a secret alone does **not** trigger a run — always follow with `gh workflow run` or the helper script.
+
+## Verify the live server
+
+```bash
+SERVER_IP="$(cd terraform && terraform output -raw server_static_ip)"
+ssh -i ~/.ssh/id_rsa root@"${SERVER_IP}" "tmux list-sessions"
+ssh -i ~/.ssh/id_rsa root@"${SERVER_IP}" "tmux attach -t trading_session"   # detach: Ctrl+B then D
+ssh -i ~/.ssh/id_rsa root@"${SERVER_IP}" "tail -f /root/trading-bot/logs/fyersApi.log"
+```
+
+## Strategy configuration
+
+Entry/exit levels live in `.env.buy.example` and `.env.sell.example` in this repo. They are copied to the droplet on each deploy. Edit those files, push to `main`, and the pipeline redeploys with updated strategy settings.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---------|-------|
+| SSH timeout after apply | New droplet still booting; re-run workflow or wait for cloud-init |
+| `tmux has-session` fails | `ssh root@IP 'cat /root/trading-bot/logs/fyersApi.log'` |
+| Auth errors in logs | Re-run `push-daily-token.sh` with a fresh token from `auth.py` |
+| State push failed | Confirm `STATE_REPO_PAT` can write to `mainakmb/tfstate-storage` |

@@ -1,46 +1,46 @@
 variable "do_token" {
-  description = "DigitalOcean API token (set via GitHub secret DIGITALOCEAN_TOKEN or TF_VAR_do_token)"
   type        = string
+  description = "Your DigitalOcean Personal Access Token"
   sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.do_token)) > 0
+    error_message = "do_token must not be empty."
+  }
 }
 
 variable "pvt_key_path" {
-  description = "Path to the SSH private key; the matching .pub file is registered with DigitalOcean"
   type        = string
+  description = "Local path to your private SSH key (e.g., ~/.ssh/id_ed25519)"
+  default     = "~/.ssh/id_ed25519"
 }
 
 variable "droplet_name" {
-  description = "Name of the trading bot droplet"
   type        = string
-  default     = "mumbai-trading-bot"
+  description = "DigitalOcean droplet name"
+  default     = "mumbai-trading-node"
 }
 
 variable "region" {
-  description = "DigitalOcean region slug (blr1 is closest to Mumbai)"
   type        = string
+  description = "DigitalOcean region slug"
   default     = "blr1"
 }
 
 variable "droplet_size" {
-  description = "DigitalOcean droplet size slug"
   type        = string
-  default     = "s-1vcpu-1gb"
+  description = "DigitalOcean droplet size slug"
+  default     = "s-1vcpu-512mb-10gb"
 }
 
 variable "droplet_image" {
-  description = "DigitalOcean droplet image slug"
   type        = string
-  default     = "ubuntu-22-04-x86_64"
+  description = "DigitalOcean droplet image slug"
+  default     = "ubuntu-24-04-x64"
 }
 
 variable "ssh_key_name" {
-  description = "Label for the SSH key uploaded to DigitalOcean"
   type        = string
-  default     = "fyers-api-trading-bot"
-}
-
-variable "droplet_tags" {
-  description = "Tags applied to the droplet"
-  type        = list(string)
-  default     = ["fyers-api", "trading-bot"]
+  description = "Name for the SSH key registered in DigitalOcean"
+  default     = "trading-bot-ssh-key"
 }
