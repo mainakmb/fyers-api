@@ -117,7 +117,7 @@ jobs:
           ssh "${SSH_OPTS[@]}" "root@${SERVER_IP}" "mkdir -p '${APP_DIR}/logs'"
 
           scp "${SSH_OPTS[@]}" \
-            buy.py sell.py main.py execution_log.py requirements.txt \
+            buy.py sell.py main.py execution_log.py test-api.py requirements.txt \
             ".env.buy.example" ".env.sell.example" \
             "root@${SERVER_IP}:${APP_DIR}/"
 
@@ -164,6 +164,13 @@ jobs:
           source .venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
+
+          echo "Running FYERS API connectivity test..."
+          if ! python3 test-api.py; then
+            echo "::error::FYERS API test failed. Token may be expired or secrets misconfigured."
+            tail -n 30 logs/fyersApi.log 2>/dev/null || true
+            exit 1
+          fi
 
           tmux kill-session -t "${TMUX_SESSION}" 2>/dev/null || true
           tmux new-session -d -s "${TMUX_SESSION}" \

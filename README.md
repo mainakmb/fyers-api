@@ -38,7 +38,7 @@ Infrastructure and app deploy are split into two GitHub Actions workflows:
 | Workflow | What it does |
 |----------|----------------|
 | [**Deploy Server**](.github/workflows/deploy-server.yml) | Provisions a DigitalOcean droplet (`blr1`, 512MB + 1GB swap) and syncs Terraform state to [`mainakmb/tfstate-storage`](https://github.com/mainakmb/tfstate-storage) |
-| [**Deploy App**](.github/workflows/deploy-app.yml) | SSH deploys code to `/root/trading-bot/`, writes FYERS secrets, restarts `main.py` in a `tmux` session |
+| [**Deploy App**](.github/workflows/deploy-app.yml) | SSH deploys code to `/root/trading-bot/`, runs `test-api.py`, then starts `main.py` in a `tmux` session |
 
 ```text
 GitHub Actions
@@ -60,7 +60,7 @@ GitHub Actions
    | `FYERS_SECRET_KEY` | Deploy App |
 
 2. Run [**Deploy Server**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml) — provisions the droplet and syncs state to `mainakmb/tfstate-storage`
-3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — deploys code, writes FYERS secrets, starts `main.py` in tmux
+3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — deploys code, writes FYERS secrets, verifies API connectivity with `test-api.py`, then starts `main.py` in tmux
 
 **Connect to the server**
 
@@ -78,6 +78,9 @@ tmux list-sessions
 tmux attach -t trading_session          # detach: Ctrl+B, then D
 tail -f /root/trading-bot/logs/runner.log
 tail -f /root/trading-bot/logs/fyersApi.log
+
+# Re-run API connectivity test manually
+cd /root/trading-bot && source .venv/bin/activate && python3 test-api.py
 ```
 
 **Daily token refresh**
