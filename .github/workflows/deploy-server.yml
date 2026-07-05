@@ -8,6 +8,11 @@ on:
       - "terraform/**"
       - ".github/workflows/deploy-server.yml"
   workflow_dispatch:
+    inputs:
+      destroy_server:
+        description: Destroy the DigitalOcean droplet (terraform destroy)
+        type: boolean
+        default: false
 
 env:
   TF_STATE_REPO: mainakmb/tfstate-storage
@@ -83,6 +88,7 @@ jobs:
 
       - name: Terraform Apply
         id: terraform_apply
+        if: github.event_name != 'workflow_dispatch' || inputs.destroy_server != true
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
           TF_VAR_do_token: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -90,14 +96,26 @@ jobs:
           terraform apply -auto-approve \
             -var="pvt_key_path=${HOME}/.ssh/id_rsa"
 
+      - name: Terraform Destroy
+        id: terraform_destroy
+        if: github.event_name == 'workflow_dispatch' && inputs.destroy_server == true
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_VAR_do_token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+        run: |
+          terraform destroy -auto-approve \
+            -var="pvt_key_path=${HOME}/.ssh/id_rsa"
+
       - name: Show Outputs
         id: infra
+        if: steps.terraform_apply.outcome == 'success'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           echo "server_ip=$(terraform output -raw server_static_ip)" >> "$GITHUB_OUTPUT"
           terraform output
 
       - name: Wait for SSH and Cloud-Init
+        if: steps.terraform_apply.outcome == 'success'
         env:
           SERVER_IP: ${{ steps.infra.outputs.server_ip }}
         run: |
@@ -116,7 +134,7 @@ jobs:
           exit 1
 
       - name: Stage Updated State for Sync
-        if: steps.terraform_apply.outcome == 'success'
+        if: steps.terraform_apply.outcome == 'success' || steps.terraform_destroy.outcome == 'success'
         run: |
           STATE_DIR="remote-state-dir/${{ env.TF_STATE_PROJECT }}"
           LOCAL_STATE="${{ env.TF_WORKING_DIR }}/terraform.tfstate"
@@ -128,7 +146,7 @@ jobs:
           fi
 
       - name: Push State Back to Storage Repository
-        if: steps.terraform_apply.outcome == 'success'
+        if: steps.terraform_apply.outcome == 'success' || steps.terraform_destroy.outcome == 'success'
         env:
           STATE_REPO_PAT: ${{ secrets.STATE_REPO_PAT }}
         run: |

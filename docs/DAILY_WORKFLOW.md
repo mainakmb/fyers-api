@@ -102,10 +102,19 @@ Ensure `FYERS_ACCESS_TOKEN` is already updated before dispatching.
 
 | Workflow | Trigger |
 |----------|---------|
-| **Deploy Server** | Push to `main` changing `terraform/**`; manual dispatch |
+| **Deploy Server** | Push to `main` changing `terraform/**`; manual dispatch (optional **Destroy server** checkbox) |
 | **Deploy App** | Push to `main` changing `*.py`, `requirements.txt`, env examples; manual dispatch; `refresh-trading-token` dispatch |
 
 Run **Deploy Server** first on a fresh setup, then **Deploy App**. Daily token refreshes only need **Deploy App**.
+
+### Destroy the droplet
+
+1. Open [Deploy Server](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml)
+2. Click **Run workflow**
+3. Check **Destroy the DigitalOcean droplet (terraform destroy)**
+4. Run — this tears down the droplet and syncs empty state back to `tfstate-storage`
+
+Push-to-`main` runs always **apply**; destroy is manual-dispatch only.
 
 Updating a secret alone does **not** trigger a run — always follow with `gh workflow run` or the helper script.
 
