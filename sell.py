@@ -165,22 +165,22 @@ def on_open():
 # --- 4. EXECUTION ---
 if __name__ == "__main__":
     current_position_qty = get_position_qty(OPTIONS_SYMBOL)
-    
+
     if current_position_qty == 0:
-        print(f"Aborting: No open position found for {OPTIONS_SYMBOL}")
+        print(f"No open position for {OPTIONS_SYMBOL} yet — monitoring index for exit levels after entry.")
     else:
-        print(f"Tracking open position of {current_position_qty} Qty. Initiating Engine...")
-        
-        fyers_ws = data_ws.FyersDataSocket(
-            access_token=WS_ACCESS_TOKEN,
-            log_path=FYERS_LOG_PATH,
-            litemode=True,  
-            write_to_file=False,
-            reconnect=True,
-            on_connect=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
-        )
-        fyers_ws.connect()
-        fyers_ws.keep_running()
+        print(f"Tracking open position of {current_position_qty} qty.")
+
+    fyers_ws = data_ws.FyersDataSocket(
+        access_token=WS_ACCESS_TOKEN,
+        log_path=FYERS_LOG_PATH,
+        litemode=True,
+        write_to_file=False,
+        reconnect=True,
+        on_connect=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+    )
+    fyers_ws.connect()
+    fyers_ws.keep_running()
