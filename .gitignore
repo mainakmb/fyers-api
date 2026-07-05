@@ -38,3 +38,16 @@ Thumbs.db
 *.swo
 *~
 
+# Terraform (local state and secrets — remote state lives in mainakmb/tfstate-storage)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+

@@ -1,0 +1,105 @@
+name: Terraform Deploy & Sync State
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+env:
+  TF_STATE_REPO: mainakmb/tfstate-storage
+  TF_STATE_PROJECT: fyers-api
+  TF_WORKING_DIR: terraform
+
+jobs:
+  terraform:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout Code Repo
+        uses: actions/checkout@v4
+
+      - name: Checkout Isolated State Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TF_STATE_REPO }}
+          token: ${{ secrets.STATE_REPO_PAT }}
+          path: remote-state-dir
+
+      - name: Inject Remote State into Workspace
+        run: |
+          STATE_DIR="remote-state-dir/${{ env.TF_STATE_PROJECT }}"
+          STATE_FILE="${STATE_DIR}/terraform.tfstate"
+          LOCAL_STATE="${{ env.TF_WORKING_DIR }}/terraform.tfstate"
+
+          mkdir -p "${STATE_DIR}"
+          if [ -f "${STATE_FILE}" ]; then
+            cp "${STATE_FILE}" "${LOCAL_STATE}"
+            echo "Restored state from ${TF_STATE_REPO}/${{ env.TF_STATE_PROJECT }}/terraform.tfstate"
+          else
+            echo "No existing state for ${{ env.TF_STATE_PROJECT }}; starting fresh."
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Prepare SSH Key for DigitalOcean
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_VAR_do_token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_VAR_do_token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+        run: |
+          terraform apply -auto-approve \
+            -var="pvt_key_path=${HOME}/.ssh/id_rsa"
+
+      - name: Show Outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform output
+
+      - name: Stage Updated State for Sync
+        if: always()
+        run: |
+          STATE_DIR="remote-state-dir/${{ env.TF_STATE_PROJECT }}"
+          LOCAL_STATE="${{ env.TF_WORKING_DIR }}/terraform.tfstate"
+          STATE_FILE="${STATE_DIR}/terraform.tfstate"
+
+          mkdir -p "${STATE_DIR}"
+          if [ -f "${LOCAL_STATE}" ]; then
+            cp "${LOCAL_STATE}" "${STATE_FILE}"
+          fi
+
+      - name: Push State Back to Storage Repository
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.STATE_REPO_PAT }}
+        run: |
+          cd remote-state-dir
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add "${{ env.TF_STATE_PROJECT }}/terraform.tfstate"
+          if git diff --cached --quiet; then
+            echo "State unchanged; skipping commit."
+          else
+            git commit -m "sync(${{ env.TF_STATE_PROJECT }}): run ${{ github.run_id }}"
+            git push origin main
+          fi

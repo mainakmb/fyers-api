@@ -1,22 +1,32 @@
 terraform {
   required_providers {
-    utho = {
-      source  = "uthoplatforms/utho"
-      version = "~> 0.6"
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.0"
     }
   }
 }
 
-provider "utho" {
-  token = var.utho_api_token
+provider "digitalocean" {
+  token = var.do_token
 }
 
-resource "utho_cloud_instance" "trading_bot_server" {
-  name            = "mumbai-trading-bot"
-  dcslug          = "inmumbaizone2" # Mumbai data center
-  planid          = var.plan_id     # Nano tier (1 vCPU, lightweight)
-  image           = "ubuntu-22.04-x86_64"
-  root_password   = var.root_password
-  billingcycle    = "monthly"
-  enable_publicip = "true"
+locals {
+  ssh_private_key_path = startswith(var.pvt_key_path, "~") ? replace(var.pvt_key_path, "~", pathexpand("~")) : var.pvt_key_path
+  ssh_public_key_path  = "${local.ssh_private_key_path}.pub"
+}
+
+resource "digitalocean_ssh_key" "trading_bot" {
+  name       = var.ssh_key_name
+  public_key = file(local.ssh_public_key_path)
+}
+
+resource "digitalocean_droplet" "trading_bot_server" {
+  name     = var.droplet_name
+  region   = var.region
+  size     = var.droplet_size
+  image    = var.droplet_image
+  ssh_keys = [digitalocean_ssh_key.trading_bot.fingerprint]
+
+  tags = var.droplet_tags
 }
