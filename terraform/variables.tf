@@ -18,7 +18,7 @@ variable "pvt_key_path" {
 variable "droplet_name" {
   type        = string
   description = "DigitalOcean droplet name"
-  default     = "mumbai-trading-node"
+  default     = "trading-node"
 }
 
 variable "region" {
