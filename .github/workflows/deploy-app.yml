@@ -88,10 +88,9 @@ jobs:
           echo "Deploying to $(terraform output -raw server_static_ip)"
 
       - name: Prepare SSH Key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: bash .github/scripts/prepare-ssh-key.sh
 
       - name: Sync Application Code to Droplet
         env:

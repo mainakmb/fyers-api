@@ -71,11 +71,9 @@ jobs:
           terraform_version: "1.9.0"
 
       - name: Prepare SSH Key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: bash .github/scripts/prepare-ssh-key.sh
 
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}

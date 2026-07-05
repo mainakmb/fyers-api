@@ -45,6 +45,23 @@ If [Deploy Server](https://github.com/mainakmb/fyers-api/actions/workflows/deplo
 
 Do **not** store this PAT only under repository secrets if the environment secret is missing — the workflow reads from the `production` environment.
 
+### Fix `SSH_PRIVATE_KEY` (exit 255 on Prepare SSH Key)
+
+If Deploy Server fails at **Prepare SSH Key** with exit code `255`, the secret value is missing or not a valid private key.
+
+1. Generate or reuse an **unencrypted** key pair locally:
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/fyers-trading-bot -N ""
+   ```
+2. Copy the **private** key file contents exactly (including `BEGIN` / `END` lines):
+   ```bash
+   cat ~/.ssh/fyers-trading-bot
+   ```
+3. Add to **Settings → Environments → production → Environment secrets** as `SSH_PRIVATE_KEY`.
+4. Re-run **Deploy Server**.
+
+The workflow writes the key to `~/.ssh/id_rsa` on the runner and derives the `.pub` file for Terraform. Use the same key pair you intend to SSH with after deploy.
+
 ## Morning routine (refresh token + redeploy)
 
 ### Option A — helper script (recommended)
