@@ -32,6 +32,26 @@ jobs:
       - name: Checkout Code Repo
         uses: actions/checkout@v4
 
+      - name: Validate State Repo PAT
+        env:
+          STATE_REPO_PAT: ${{ secrets.STATE_REPO_PAT }}
+        run: |
+          if [ -z "${STATE_REPO_PAT}" ]; then
+            echo "::error::STATE_REPO_PAT is empty. Add it under Settings → Environments → production → Environment secrets."
+            exit 1
+          fi
+
+          http_code="$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${STATE_REPO_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ env.TF_STATE_REPO }}")"
+
+          if [ "${http_code}" != "200" ]; then
+            echo "::error::STATE_REPO_PAT cannot access ${{ env.TF_STATE_REPO }} (HTTP ${http_code})."
+            echo "::error::Use a classic PAT with the 'repo' scope, or a fine-grained PAT with Contents Read/Write on mainakmb/tfstate-storage."
+            exit 1
+          fi
+
       - name: Checkout Isolated State Repo
         uses: actions/checkout@v4
         with:

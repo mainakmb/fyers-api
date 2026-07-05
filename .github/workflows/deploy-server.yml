@@ -24,6 +24,26 @@ jobs:
       - name: Checkout Code Repo
         uses: actions/checkout@v4
 
+      - name: Validate State Repo PAT
+        env:
+          STATE_REPO_PAT: ${{ secrets.STATE_REPO_PAT }}
+        run: |
+          if [ -z "${STATE_REPO_PAT}" ]; then
+            echo "::error::STATE_REPO_PAT is empty. Add it under Settings → Environments → production → Environment secrets."
+            exit 1
+          fi
+
+          http_code="$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${STATE_REPO_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ env.TF_STATE_REPO }}")"
+
+          if [ "${http_code}" != "200" ]; then
+            echo "::error::STATE_REPO_PAT cannot access ${{ env.TF_STATE_REPO }} (HTTP ${http_code})."
+            echo "::error::Use a classic PAT with the 'repo' scope, or a fine-grained PAT with Contents Read/Write on mainakmb/tfstate-storage."
+            exit 1
+          fi
+
       - name: Checkout Isolated State Repo
         uses: actions/checkout@v4
         with:
@@ -64,6 +84,7 @@ jobs:
         run: terraform init
 
       - name: Terraform Apply
+        id: terraform_apply
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
           TF_VAR_do_token: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -97,7 +118,7 @@ jobs:
           exit 1
 
       - name: Stage Updated State for Sync
-        if: always()
+        if: steps.terraform_apply.outcome == 'success'
         run: |
           STATE_DIR="remote-state-dir/${{ env.TF_STATE_PROJECT }}"
           LOCAL_STATE="${{ env.TF_WORKING_DIR }}/terraform.tfstate"
@@ -109,13 +130,19 @@ jobs:
           fi
 
       - name: Push State Back to Storage Repository
-        if: always()
+        if: steps.terraform_apply.outcome == 'success'
         env:
-          GITHUB_TOKEN: ${{ secrets.STATE_REPO_PAT }}
+          STATE_REPO_PAT: ${{ secrets.STATE_REPO_PAT }}
         run: |
+          if [ ! -d remote-state-dir/.git ]; then
+            echo "::error::State repo checkout did not create a git workspace."
+            exit 1
+          fi
+
           cd remote-state-dir
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${STATE_REPO_PAT}@github.com/${{ env.TF_STATE_REPO }}.git"
 
           git add "${{ env.TF_STATE_PROJECT }}/terraform.tfstate"
           if git diff --cached --quiet; then

@@ -23,7 +23,7 @@ deploy-app.yml
 
 ## Required GitHub Secrets
 
-Configure these under **Settings → Secrets and variables → Actions** (use the `production` environment if enabled):
+Configure these under **Settings → Environments → production → Environment secrets** (both workflows use the `production` environment):
 
 | Secret | Workflow |
 |--------|----------|
@@ -33,6 +33,17 @@ Configure these under **Settings → Secrets and variables → Actions** (use th
 | `FYERS_ACCESS_TOKEN` | Deploy App |
 | `FYERS_APP_ID` | Deploy App |
 | `FYERS_SECRET_KEY` | Deploy App |
+
+### Fix `STATE_REPO_PAT` (403 on tfstate-storage)
+
+If [Deploy Server](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml) fails with `unable to access tfstate-storage: 403`:
+
+1. Create a **classic PAT** with the **`repo`** scope, **or** a **fine-grained PAT** limited to `mainakmb/tfstate-storage` with **Contents: Read and write**.
+2. In `mainakmb/fyers-api`, go to **Settings → Environments → production → Add secret**.
+3. Name: `STATE_REPO_PAT`, value: the PAT string.
+4. Re-run **Deploy Server** from the Actions tab.
+
+Do **not** store this PAT only under repository secrets if the environment secret is missing — the workflow reads from the `production` environment.
 
 ## Morning routine (refresh token + redeploy)
 
