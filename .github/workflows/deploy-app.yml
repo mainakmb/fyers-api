@@ -12,6 +12,14 @@ on:
       - ".github/workflows/deploy-app.yml"
   workflow_dispatch:
     inputs:
+      override_buy_strategy:
+        description: "Override buy strategy (check to use buy inputs below)"
+        type: boolean
+        default: false
+      override_sell_strategy:
+        description: "Override sell strategy (check to use sell inputs below)"
+        type: boolean
+        default: false
       buy_index_symbol:
         description: "Buy — INDEX_SYMBOL (blank = .env.buy.example)"
         type: string
@@ -83,6 +91,8 @@ jobs:
 
       - name: Prepare Strategy Config
         env:
+          OVERRIDE_BUY: ${{ inputs.override_buy_strategy }}
+          OVERRIDE_SELL: ${{ inputs.override_sell_strategy }}
           BUY_INDEX_SYMBOL: ${{ inputs.buy_index_symbol }}
           BUY_OPTIONS_SYMBOL: ${{ inputs.buy_options_symbol }}
           BUY_INDEX_ENTRY: ${{ inputs.buy_index_entry }}
@@ -112,21 +122,29 @@ jobs:
           cp .env.sell.example .env.sell
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            set_env_value .env.buy INDEX_SYMBOL "${BUY_INDEX_SYMBOL}"
-            set_env_value .env.buy OPTIONS_SYMBOL "${BUY_OPTIONS_SYMBOL}"
-            set_env_value .env.buy INDEX_ENTRY "${BUY_INDEX_ENTRY}"
-            set_env_value .env.buy ORDER_LOTS "${BUY_ORDER_LOTS}"
-            set_env_value .env.buy PRODUCT_TYPE "${BUY_PRODUCT_TYPE}"
-            set_env_value .env.buy ENTRY_DELAY_SECONDS "${BUY_ENTRY_DELAY_SECONDS}"
+            if [ "${OVERRIDE_BUY}" = "true" ]; then
+              set_env_value .env.buy INDEX_SYMBOL "${BUY_INDEX_SYMBOL}"
+              set_env_value .env.buy OPTIONS_SYMBOL "${BUY_OPTIONS_SYMBOL}"
+              set_env_value .env.buy INDEX_ENTRY "${BUY_INDEX_ENTRY}"
+              set_env_value .env.buy ORDER_LOTS "${BUY_ORDER_LOTS}"
+              set_env_value .env.buy PRODUCT_TYPE "${BUY_PRODUCT_TYPE}"
+              set_env_value .env.buy ENTRY_DELAY_SECONDS "${BUY_ENTRY_DELAY_SECONDS}"
+              echo "Buy strategy: overrides applied"
+            else
+              echo "Buy strategy: using .env.buy.example (override unchecked)"
+            fi
 
-            set_env_value .env.sell INDEX_SYMBOL "${SELL_INDEX_SYMBOL}"
-            set_env_value .env.sell OPTIONS_SYMBOL "${SELL_OPTIONS_SYMBOL}"
-            set_env_value .env.sell INDEX_STOP_LOSS "${SELL_INDEX_STOP_LOSS}"
-            set_env_value .env.sell INDEX_TARGET "${SELL_INDEX_TARGET}"
-            set_env_value .env.sell PRODUCT_TYPE "${SELL_PRODUCT_TYPE}"
-            set_env_value .env.sell EXIT_DELAY_SECONDS "${SELL_EXIT_DELAY_SECONDS}"
-
-            echo "Strategy from .env.*.example with workflow_dispatch overrides applied:"
+            if [ "${OVERRIDE_SELL}" = "true" ]; then
+              set_env_value .env.sell INDEX_SYMBOL "${SELL_INDEX_SYMBOL}"
+              set_env_value .env.sell OPTIONS_SYMBOL "${SELL_OPTIONS_SYMBOL}"
+              set_env_value .env.sell INDEX_STOP_LOSS "${SELL_INDEX_STOP_LOSS}"
+              set_env_value .env.sell INDEX_TARGET "${SELL_INDEX_TARGET}"
+              set_env_value .env.sell PRODUCT_TYPE "${SELL_PRODUCT_TYPE}"
+              set_env_value .env.sell EXIT_DELAY_SECONDS "${SELL_EXIT_DELAY_SECONDS}"
+              echo "Sell strategy: overrides applied"
+            else
+              echo "Sell strategy: using .env.sell.example (override unchecked)"
+            fi
           else
             echo "Strategy from .env.buy.example and .env.sell.example:"
           fi
