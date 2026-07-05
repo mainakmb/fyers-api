@@ -129,11 +129,19 @@ ssh -i ~/.ssh/id_rsa root@"${SERVER_IP}" "tail -f /root/trading-bot/logs/fyersAp
 
 ## Strategy configuration
 
-**Manual deploy (Run workflow):** [Deploy App](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) has **Override buy strategy** and **Override sell strategy** checkboxes. When checked, the buy/sell text inputs below are applied (blank fields keep the example-file value). When unchecked, that side uses `.env.buy.example` or `.env.sell.example` from the repo.
+**Manual deploy (Run workflow):** [Deploy App](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) asks which side to customize first:
+
+| Strategy side | What you fill in | Other side |
+|---------------|------------------|------------|
+| `use_examples` | Nothing — ignores inputs | Both from example files |
+| `buy` | 6 shared fields (mapped to buy keys) | `.env.sell.example` |
+| `sell` | Same 6 fields (mapped to sell keys) | `.env.buy.example` |
+
+Shared fields: `INDEX_SYMBOL`, `OPTIONS_SYMBOL`, `PRODUCT_TYPE`, plus `level_primary`, `level_secondary`, `delay_seconds` (labels in the workflow describe buy vs sell mapping). Blank fields keep the example-file value.
 
 **Automatic deploy (push to `main`):** Uses `.env.buy.example` and `.env.sell.example` from the repo. Edit those files and push to redeploy with updated strategy settings.
 
-**Daily token refresh** (`push-daily-token.sh`) triggers Deploy App without inputs, so strategy comes from the example files in `main`.
+**Daily token refresh** (`push-daily-token.sh`) triggers Deploy App with `use_examples` behavior — strategy comes from the example files in `main`.
 
 ## Troubleshooting
 

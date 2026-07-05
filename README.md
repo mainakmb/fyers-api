@@ -60,7 +60,7 @@ GitHub Actions
    | `FYERS_SECRET_KEY` | Deploy App |
 
 2. Run [**Deploy Server**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml) — provisions the droplet and syncs state to `mainakmb/tfstate-storage`
-3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — deploys code, writes FYERS secrets, verifies API connectivity with `test-api.py`, then starts `main.py` in tmux. Use **Run workflow** and check **Override buy strategy** / **Override sell strategy** to customize fields; leave unchecked to use `.env.buy.example` / `.env.sell.example`. Push-to-`main` deploys always use those example files.
+3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — deploys code, writes FYERS secrets, verifies API connectivity with `test-api.py`, then starts `main.py` in tmux. Use **Run workflow**, pick **buy** or **sell** under **Strategy to customize**, then fill in that side's fields only (the other side uses the example file). Choose **use_examples** for token-only redeploys. Push-to-`main` deploys always use both example files.
 
 **Connect to the server**
 
