@@ -12,60 +12,36 @@ on:
       - ".github/workflows/deploy-app.yml"
   workflow_dispatch:
     inputs:
-      override_buy_strategy:
-        description: "Override buy strategy (check to use buy inputs below)"
-        type: boolean
-        default: false
-      override_sell_strategy:
-        description: "Override sell strategy (check to use sell inputs below)"
-        type: boolean
-        default: false
-      buy_index_symbol:
-        description: "Buy — INDEX_SYMBOL (blank = .env.buy.example)"
+      strategy_side:
+        description: "Strategy to customize (other side uses example file from repo)"
+        type: choice
+        options:
+          - use_examples
+          - buy
+          - sell
+        default: use_examples
+      index_symbol:
+        description: "INDEX_SYMBOL (buy or sell — blank = example file)"
         type: string
         default: ""
-      buy_options_symbol:
-        description: "Buy — OPTIONS_SYMBOL (blank = .env.buy.example)"
+      options_symbol:
+        description: "OPTIONS_SYMBOL (buy or sell — blank = example file)"
         type: string
         default: ""
-      buy_index_entry:
-        description: "Buy — INDEX_ENTRY (blank = .env.buy.example)"
+      product_type:
+        description: "PRODUCT_TYPE: INTRADAY or MARGIN (blank = example file)"
         type: string
         default: ""
-      buy_order_lots:
-        description: "Buy — ORDER_LOTS (blank = .env.buy.example)"
+      level_primary:
+        description: "Buy: INDEX_ENTRY | Sell: INDEX_STOP_LOSS (blank = example file)"
         type: string
         default: ""
-      buy_product_type:
-        description: "Buy — PRODUCT_TYPE: INTRADAY or MARGIN (blank = .env.buy.example)"
+      level_secondary:
+        description: "Buy: ORDER_LOTS | Sell: INDEX_TARGET (blank = example file)"
         type: string
         default: ""
-      buy_entry_delay_seconds:
-        description: "Buy — ENTRY_DELAY_SECONDS (blank = .env.buy.example)"
-        type: string
-        default: ""
-      sell_index_symbol:
-        description: "Sell — INDEX_SYMBOL (blank = .env.sell.example)"
-        type: string
-        default: ""
-      sell_options_symbol:
-        description: "Sell — OPTIONS_SYMBOL (blank = .env.sell.example)"
-        type: string
-        default: ""
-      sell_index_stop_loss:
-        description: "Sell — INDEX_STOP_LOSS (blank = .env.sell.example)"
-        type: string
-        default: ""
-      sell_index_target:
-        description: "Sell — INDEX_TARGET (blank = .env.sell.example)"
-        type: string
-        default: ""
-      sell_product_type:
-        description: "Sell — PRODUCT_TYPE: INTRADAY or MARGIN (blank = .env.sell.example)"
-        type: string
-        default: ""
-      sell_exit_delay_seconds:
-        description: "Sell — EXIT_DELAY_SECONDS (blank = .env.sell.example)"
+      delay_seconds:
+        description: "Buy: ENTRY_DELAY_SECONDS | Sell: EXIT_DELAY_SECONDS (blank = example file)"
         type: string
         default: ""
   repository_dispatch:
@@ -91,20 +67,13 @@ jobs:
 
       - name: Prepare Strategy Config
         env:
-          OVERRIDE_BUY: ${{ inputs.override_buy_strategy }}
-          OVERRIDE_SELL: ${{ inputs.override_sell_strategy }}
-          BUY_INDEX_SYMBOL: ${{ inputs.buy_index_symbol }}
-          BUY_OPTIONS_SYMBOL: ${{ inputs.buy_options_symbol }}
-          BUY_INDEX_ENTRY: ${{ inputs.buy_index_entry }}
-          BUY_ORDER_LOTS: ${{ inputs.buy_order_lots }}
-          BUY_PRODUCT_TYPE: ${{ inputs.buy_product_type }}
-          BUY_ENTRY_DELAY_SECONDS: ${{ inputs.buy_entry_delay_seconds }}
-          SELL_INDEX_SYMBOL: ${{ inputs.sell_index_symbol }}
-          SELL_OPTIONS_SYMBOL: ${{ inputs.sell_options_symbol }}
-          SELL_INDEX_STOP_LOSS: ${{ inputs.sell_index_stop_loss }}
-          SELL_INDEX_TARGET: ${{ inputs.sell_index_target }}
-          SELL_PRODUCT_TYPE: ${{ inputs.sell_product_type }}
-          SELL_EXIT_DELAY_SECONDS: ${{ inputs.sell_exit_delay_seconds }}
+          STRATEGY_SIDE: ${{ inputs.strategy_side }}
+          INDEX_SYMBOL: ${{ inputs.index_symbol }}
+          OPTIONS_SYMBOL: ${{ inputs.options_symbol }}
+          PRODUCT_TYPE: ${{ inputs.product_type }}
+          LEVEL_PRIMARY: ${{ inputs.level_primary }}
+          LEVEL_SECONDARY: ${{ inputs.level_secondary }}
+          DELAY_SECONDS: ${{ inputs.delay_seconds }}
         run: |
           set_env_value() {
             local file="$1" key="$2" value="$3"
@@ -122,29 +91,29 @@ jobs:
           cp .env.sell.example .env.sell
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            if [ "${OVERRIDE_BUY}" = "true" ]; then
-              set_env_value .env.buy INDEX_SYMBOL "${BUY_INDEX_SYMBOL}"
-              set_env_value .env.buy OPTIONS_SYMBOL "${BUY_OPTIONS_SYMBOL}"
-              set_env_value .env.buy INDEX_ENTRY "${BUY_INDEX_ENTRY}"
-              set_env_value .env.buy ORDER_LOTS "${BUY_ORDER_LOTS}"
-              set_env_value .env.buy PRODUCT_TYPE "${BUY_PRODUCT_TYPE}"
-              set_env_value .env.buy ENTRY_DELAY_SECONDS "${BUY_ENTRY_DELAY_SECONDS}"
-              echo "Buy strategy: overrides applied"
-            else
-              echo "Buy strategy: using .env.buy.example (override unchecked)"
-            fi
-
-            if [ "${OVERRIDE_SELL}" = "true" ]; then
-              set_env_value .env.sell INDEX_SYMBOL "${SELL_INDEX_SYMBOL}"
-              set_env_value .env.sell OPTIONS_SYMBOL "${SELL_OPTIONS_SYMBOL}"
-              set_env_value .env.sell INDEX_STOP_LOSS "${SELL_INDEX_STOP_LOSS}"
-              set_env_value .env.sell INDEX_TARGET "${SELL_INDEX_TARGET}"
-              set_env_value .env.sell PRODUCT_TYPE "${SELL_PRODUCT_TYPE}"
-              set_env_value .env.sell EXIT_DELAY_SECONDS "${SELL_EXIT_DELAY_SECONDS}"
-              echo "Sell strategy: overrides applied"
-            else
-              echo "Sell strategy: using .env.sell.example (override unchecked)"
-            fi
+            case "${STRATEGY_SIDE}" in
+              buy)
+                set_env_value .env.buy INDEX_SYMBOL "${INDEX_SYMBOL}"
+                set_env_value .env.buy OPTIONS_SYMBOL "${OPTIONS_SYMBOL}"
+                set_env_value .env.buy PRODUCT_TYPE "${PRODUCT_TYPE}"
+                set_env_value .env.buy INDEX_ENTRY "${LEVEL_PRIMARY}"
+                set_env_value .env.buy ORDER_LOTS "${LEVEL_SECONDARY}"
+                set_env_value .env.buy ENTRY_DELAY_SECONDS "${DELAY_SECONDS}"
+                echo "Buy strategy: overrides applied (.env.sell from .env.sell.example)"
+                ;;
+              sell)
+                set_env_value .env.sell INDEX_SYMBOL "${INDEX_SYMBOL}"
+                set_env_value .env.sell OPTIONS_SYMBOL "${OPTIONS_SYMBOL}"
+                set_env_value .env.sell PRODUCT_TYPE "${PRODUCT_TYPE}"
+                set_env_value .env.sell INDEX_STOP_LOSS "${LEVEL_PRIMARY}"
+                set_env_value .env.sell INDEX_TARGET "${LEVEL_SECONDARY}"
+                set_env_value .env.sell EXIT_DELAY_SECONDS "${DELAY_SECONDS}"
+                echo "Sell strategy: overrides applied (.env.buy from .env.buy.example)"
+                ;;
+              *)
+                echo "Strategy from .env.buy.example and .env.sell.example (use_examples)"
+                ;;
+            esac
           else
             echo "Strategy from .env.buy.example and .env.sell.example:"
           fi
