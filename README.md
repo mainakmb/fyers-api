@@ -6,7 +6,6 @@ Python scripts that watch a live index over the FYERS WebSocket and place market
 |--------|---------|
 | `buy.py` | Enter a position when the index hits an entry level |
 | `sell.py` | Exit an open position on stop-loss or target levels |
-| `main.py` | Local supervisor that runs `buy.py` and `sell.py` together (optional) |
 
 ## Quick start (local)
 
@@ -21,14 +20,8 @@ cp .env.sell.example .env.sell
 # Edit .env.buy and .env.sell for today's symbols and levels
 
 python test-api.py   # verify token
-python buy.py        # wait for entry
+python buy.py        # wait for entry (separate terminal)
 python sell.py       # manage exit after position is open
-```
-
-Or run both loops together:
-
-```bash
-python main.py
 ```
 
 ## Cloud deployment
@@ -226,7 +219,7 @@ On the server (`/root/trading-bot/logs/`):
 ## Project layout
 
 ```
-├── buy.py / sell.py / main.py   # Trading loops + server supervisor
+├── buy.py / sell.py             # Trading loops (separate tmux sessions on server)
 ├── execution_log.py             # Shared execution logging
 ├── auth.py                      # OAuth token helper (local)
 ├── test-api.py                  # API connectivity smoke test
