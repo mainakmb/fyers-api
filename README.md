@@ -1,20 +1,19 @@
-# FYERS Options Trading Scripts
+# FYERS Options Trading Bot
 
-Local Python scripts that watch a live index over the FYERS WebSocket and place market orders on options contracts.
+Python scripts that watch a live index over the FYERS WebSocket and place market orders on options contracts. Run locally during development, or deploy hands-free to a **$4/month DigitalOcean droplet** via GitHub Actions.
 
 | Script | Purpose |
 |--------|---------|
 | `buy.py` | Enter a position when the index hits an entry level |
 | `sell.py` | Exit an open position on stop-loss or target levels |
+| `main.py` | Supervisor that runs `buy.py` and `sell.py` in parallel (used on the server) |
 
-These scripts are intended for **local execution only** — run them from your machine during market hours.
-
-## Quick start
+## Quick start (local)
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install fyers-apiv3 python-dotenv
+pip install -r requirements.txt
 
 python auth.py
 cp .env.buy.example .env.buy
@@ -26,27 +25,63 @@ python buy.py        # wait for entry
 python sell.py       # manage exit after position is open
 ```
 
+Or run both loops together:
+
+```bash
+python main.py
+```
+
+## Cloud deployment
+
+Infrastructure and app deploy are split into two GitHub Actions workflows:
+
+| Workflow | What it does |
+|----------|----------------|
+| [**Deploy Server**](.github/workflows/deploy-server.yml) | Provisions a DigitalOcean droplet (`blr1`, 512MB + 1GB swap) and syncs Terraform state to [`mainakmb/tfstate-storage`](https://github.com/mainakmb/tfstate-storage) |
+| [**Deploy App**](.github/workflows/deploy-app.yml) | SSH deploys code to `/root/trading-bot/`, writes FYERS secrets, restarts `main.py` in a `tmux` session |
+
+```text
+GitHub Actions
+  deploy-server.yml  →  DO droplet + tfstate sync
+  deploy-app.yml     →  /root/trading-bot/  (tmux: trading_session)
+```
+
+**First-time setup**
+
+1. Add secrets under **Settings → Environments → production** (see [docs/DAILY_WORKFLOW.md](docs/DAILY_WORKFLOW.md))
+2. Run **Deploy Server** from the [Actions tab](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml)
+3. Run **Deploy App** from the [Actions tab](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml)
+
+**Daily token refresh**
+
+```bash
+python auth.py
+./scripts/push-daily-token.sh
+```
+
+**Destroy the droplet** — run **Deploy Server** manually with the **Destroy server** checkbox checked.
+
+Full ops guide: [docs/DAILY_WORKFLOW.md](docs/DAILY_WORKFLOW.md)
+
 ## How it works
 
 ### Buy (`buy.py`)
 
-1. Loads config from `.env.buy`.
+1. Loads secrets from `.env`, strategy from `.env.buy`.
 2. Aborts if a position already exists for `OPTIONS_SYMBOL`.
 3. Subscribes to `INDEX_SYMBOL` over WebSocket.
-4. Fetches lot size from the FYERS symbol master API and places a **market buy** for `ORDER_LOTS` lot(s) when the index crosses `INDEX_ENTRY`.
+4. Fetches lot size from the FYERS symbol master API and places a **market buy** when the index crosses `INDEX_ENTRY`.
 
 | Option | Buy triggers when |
 |--------|-------------------|
 | CE (call) | Index ≤ `INDEX_ENTRY` (buy on dip) |
 | PE (put)  | Index ≥ `INDEX_ENTRY` (buy on rally) |
 
-Entry direction matches `sell.py` stop-loss logic so buy and sell levels stay consistent.
-
 Optional `ENTRY_DELAY_SECONDS` holds the order briefly after the trigger. If price retraces out of the entry zone before the delay expires, the timer resets.
 
 ### Sell (`sell.py`)
 
-1. Loads config from `.env.sell`.
+1. Loads secrets from `.env`, strategy from `.env.sell`.
 2. Aborts if no open position exists for `OPTIONS_SYMBOL`.
 3. Subscribes to `INDEX_SYMBOL` over WebSocket.
 4. Exits with a **market order** on stop-loss or target.
@@ -57,21 +92,22 @@ Optional `ENTRY_DELAY_SECONDS` holds the order briefly after the trigger. If pri
 | PE | Index ≥ SL | Index ≤ target |
 
 - **Stop-loss** — fires immediately.
-- **Target** — waits `EXIT_DELAY_SECONDS` (premium float) after the target is hit, then exits. If price retraces out of the target zone before the delay expires, the timer resets.
+- **Target** — waits `EXIT_DELAY_SECONDS` after the target is hit, then exits.
 
 ## Prerequisites
 
 - Python 3.11+
 - A [FYERS](https://fyers.in/) trading account with API access
+- For cloud deploy: DigitalOcean account, GitHub `production` environment secrets
 
-## Setup
+## Local setup
 
 ### 1. Install dependencies
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install fyers-apiv3 python-dotenv
+pip install -r requirements.txt
 ```
 
 ### 2. Authenticate
@@ -84,11 +120,9 @@ python auth.py
 
 Complete the browser login flow and paste the `auth_code` when prompted. On success, the token is saved to `auth` in the project root (gitignored).
 
-Scripts read the token from `auth` first, then fall back to `FYERS_ACCESS_TOKEN` if the file is missing.
+Scripts read the token from `auth` first, then fall back to `FYERS_ACCESS_TOKEN` from `.env`.
 
-### 3. Configure environment files
-
-Each script loads its own env file:
+### 3. Configure strategy files
 
 ```bash
 cp .env.buy.example .env.buy
@@ -102,8 +136,8 @@ cp .env.sell.example .env.sell
 | `INDEX_SYMBOL` | Index to monitor | `NSE:NIFTY50-INDEX` |
 | `OPTIONS_SYMBOL` | Option contract to buy | `BSE:SENSEX2670277100PE` |
 | `INDEX_ENTRY` | Index level that triggers the buy | `24100.0` |
-| `ORDER_LOTS` | Number of lots to buy (qty = API lot size × lots) | `1` |
-| `PRODUCT_TYPE` | FYERS product type | `INTRADAY` |
+| `ORDER_LOTS` | Number of lots to buy | `1` |
+| `PRODUCT_TYPE` | FYERS product type (`INTRADAY` or `MARGIN`) | `INTRADAY` |
 | `ENTRY_DELAY_SECONDS` | Hold time after entry trigger (0 = immediate) | `0` |
 
 **`.env.sell`** — exit settings:
@@ -114,38 +148,16 @@ cp .env.sell.example .env.sell
 | `OPTIONS_SYMBOL` | Option contract to square off | `BSE:SENSEX2670277100PE` |
 | `INDEX_STOP_LOSS` | Index level for immediate stop-loss exit | `24150.0` |
 | `INDEX_TARGET` | Index level for delayed target exit | `24036.0` |
-| `PRODUCT_TYPE` | FYERS product type | `INTRADAY` |
+| `PRODUCT_TYPE` | FYERS product type (`INTRADAY` or `MARGIN`) | `INTRADAY` |
 | `EXIT_DELAY_SECONDS` | Premium float delay before target exit | `1` |
 
-Update `OPTIONS_SYMBOL` to match your current expiry and strike before each session.
+Update `OPTIONS_SYMBOL` to match your current expiry and strike before each session. On the server, edit `.env.buy.example` / `.env.sell.example` in this repo and push to `main` — **Deploy App** copies them on the next run.
 
 ### 4. Verify API connectivity
 
 ```bash
 python test-api.py
 ```
-
-## Running
-
-**Entry:**
-
-```bash
-python buy.py
-```
-
-**Exit:**
-
-```bash
-python sell.py
-```
-
-Typical flow: run `buy.py` for entry, then `sell.py` in a separate terminal to manage the exit.
-
-## Operational notes
-
-### Daily token refresh
-
-FYERS access tokens expire daily. Re-run `python auth.py` each morning after 8:00 AM to generate a fresh token before trading.
 
 ## Tests
 
@@ -155,22 +167,33 @@ python -m unittest discover -s tests -v
 
 Tests cover config loading only. They do not call the live API.
 
-Execution logs and FYERS SDK logs are written under `logs/`:
+## Logs
+
+Runtime logs are written under `logs/` (gitignored):
+
 - `logs/buy-executions.jsonl` / `logs/sell-executions.jsonl` — trade execution records
 - `logs/fyersApi.log` / `logs/fyersRequests.log` — FYERS SDK logs
+
+On the server: `/root/trading-bot/logs/`
 
 ## Project layout
 
 ```
-├── buy.py              # Index-triggered market buy entry
-├── sell.py             # WebSocket monitor and exit logic
-├── execution_log.py    # Shared buy/sell execution logging
-├── logs/               # All runtime logs (gitignored)
-├── auth.py             # OAuth token generation helper
-├── test-api.py         # API connectivity smoke test
-├── .env.buy.example    # Example config for buy.py
-├── .env.sell.example   # Example config for sell.py
-├── .gitignore
+├── buy.py / sell.py / main.py   # Trading loops + server supervisor
+├── execution_log.py             # Shared execution logging
+├── auth.py                      # OAuth token helper (local)
+├── test-api.py                  # API connectivity smoke test
+├── requirements.txt
+├── .env.buy.example             # Entry strategy template
+├── .env.sell.example            # Exit strategy template
+├── scripts/
+│   └── push-daily-token.sh      # Refresh FYERS token + trigger Deploy App
+├── terraform/                   # DigitalOcean droplet (Terraform)
+├── .github/workflows/
+│   ├── deploy-server.yml        # Provision / destroy droplet
+│   └── deploy-app.yml           # SSH code deploy + tmux
+├── docs/
+│   └── DAILY_WORKFLOW.md        # Full CI/CD ops guide
 └── tests/
 ```
 
@@ -179,4 +202,5 @@ Execution logs and FYERS SDK logs are written under `logs/`:
 - These scripts place **real market orders** against your FYERS account.
 - Always confirm `OPTIONS_SYMBOL`, entry, SL, and target levels before starting.
 - Run `test-api.py` first to verify your token is valid.
-- Never commit `auth`, `.env.buy`, `.env.sell`, or API secrets to version control.
+- Never commit `auth`, `.env`, `.env.buy`, `.env.sell`, Terraform state, or API secrets.
+- Remote state lives in the private repo `mainakmb/tfstate-storage` — not in this repo.
