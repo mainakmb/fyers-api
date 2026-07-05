@@ -129,7 +129,7 @@ ssh -i ~/.ssh/id_rsa root@"${SERVER_IP}" "tail -f /root/trading-bot/logs/fyersAp
 
 ## Strategy configuration
 
-**Manual deploy (Run workflow):** [Deploy App](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) exposes inputs for every buy/sell field from `.env.buy.example` and `.env.sell.example` (index symbol, options symbol, entry/SL/target, lots, product type, delay seconds). Defaults match the example files — update them for today's contract before running.
+**Manual deploy (Run workflow):** [Deploy App](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) exposes inputs for every buy/sell field from `.env.buy.example` and `.env.sell.example` (index symbol, options symbol, entry/SL/target, lots, product type, delay seconds). Leave an input blank to keep the value from the example file; fill it in to override for that run only.
 
 **Automatic deploy (push to `main`):** Uses `.env.buy.example` and `.env.sell.example` from the repo. Edit those files and push to redeploy with updated strategy settings.
 
