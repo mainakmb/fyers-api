@@ -100,12 +100,12 @@ Ensure `FYERS_ACCESS_TOKEN` is already updated before dispatching.
 
 ## When each workflow runs
 
-| Workflow | Trigger |
-|----------|---------|
-| **Deploy Server** | Push to `main` changing `terraform/**`; manual dispatch (optional **Destroy server** checkbox) |
-| **Deploy App** | Push to `main` changing `*.py`, `requirements.txt`, env examples; manual dispatch; `refresh-trading-token` dispatch |
+| Workflow | Trigger | Starts tmux / `main.py` |
+|----------|---------|-------------------------|
+| **Deploy Server** | Push to `main` changing `terraform/**`; manual dispatch (optional **Destroy server** checkbox) | — |
+| **Deploy App** | Push to `main` changing `*.py`, `requirements.txt`, env examples; manual dispatch; `refresh-trading-token` dispatch | Only when manual run sets strategy side to **buy** or **sell** |
 
-Run **Deploy Server** first on a fresh setup, then **Deploy App**. Daily token refreshes only need **Deploy App**.
+Run **Deploy Server** first on a fresh setup, then **Deploy App**. Daily token refreshes sync code and run `test-api.py` — follow with a manual **Deploy App** run (**buy** or **sell**) to start trading.
 
 ### Destroy the droplet
 
@@ -129,19 +129,19 @@ ssh -i ~/.ssh/id_rsa root@"${SERVER_IP}" "tail -f /root/trading-bot/logs/fyersAp
 
 ## Strategy configuration
 
-**Manual deploy (Run workflow):** [Deploy App](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) asks which side to customize first:
+**Manual deploy (Run workflow):** [Deploy App](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) always syncs code, writes secrets, and runs `test-api.py`. The trading bot starts **only** when strategy side is **buy** or **sell**:
 
-| Strategy side | What you fill in | Other side |
-|---------------|------------------|------------|
-| `use_examples` | Nothing — ignores inputs | Both from example files |
-| `buy` | 6 shared fields (mapped to buy keys) | `.env.sell.example` |
-| `sell` | Same 6 fields (mapped to sell keys) | `.env.buy.example` |
+| Strategy side | Deploys code + test-api | Starts tmux |
+|---------------|-------------------------|-------------|
+| `use_examples` | Yes | No |
+| `buy` | Yes | Yes (buy overrides applied) |
+| `sell` | Yes | Yes (sell overrides applied) |
 
-Shared fields: `INDEX_SYMBOL`, `OPTIONS_SYMBOL`, `PRODUCT_TYPE`, plus `level_primary`, `level_secondary`, `delay_seconds` (labels in the workflow describe buy vs sell mapping). Blank fields keep the example-file value.
+When **buy** or **sell** is selected, fill the shared fields for that side; the other side uses the repo example file. Blank fields keep the example-file value.
 
-**Automatic deploy (push to `main`):** Uses `.env.buy.example` and `.env.sell.example` from the repo. Edit those files and push to redeploy with updated strategy settings.
+**Automatic deploy (push to `main`):** Syncs code and runs `test-api.py` using `.env.buy.example` and `.env.sell.example`. Does **not** start tmux — run **Deploy App** manually with **buy** or **sell** to go live.
 
-**Daily token refresh** (`push-daily-token.sh`) triggers Deploy App with `use_examples` behavior — strategy comes from the example files in `main`.
+**Daily token refresh** (`push-daily-token.sh`) syncs code and runs `test-api.py` only. Start trading with a follow-up manual **Deploy App** run (**buy** or **sell**).
 
 ## Troubleshooting
 

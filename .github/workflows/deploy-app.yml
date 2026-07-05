@@ -123,6 +123,18 @@ jobs:
           echo "--- .env.sell ---"
           cat .env.sell
 
+      - name: Resolve Deploy Mode
+        id: deploy_mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             { [ "${{ inputs.strategy_side }}" = "buy" ] || [ "${{ inputs.strategy_side }}" = "sell" ]; }; then
+            echo "start_trading=true" >> "$GITHUB_OUTPUT"
+            echo "Full deploy: strategy side is ${{ inputs.strategy_side }} — will start tmux after test-api"
+          else
+            echo "start_trading=false" >> "$GITHUB_OUTPUT"
+            echo "Partial deploy: sync code, configure secrets, run test-api only (no tmux)"
+          fi
+
       - name: Validate State Repo PAT
         env:
           STATE_REPO_PAT: ${{ secrets.STATE_REPO_PAT }}
@@ -212,7 +224,7 @@ jobs:
             ".env.buy" ".env.sell" \
             "root@${SERVER_IP}:${APP_DIR}/"
 
-      - name: Configure Secrets and Start Trading Session
+      - name: Configure Secrets and Verify API
         env:
           SERVER_IP: ${{ steps.server.outputs.server_ip }}
           FYERS_ACCESS_TOKEN: ${{ secrets.FYERS_ACCESS_TOKEN }}
@@ -220,6 +232,7 @@ jobs:
           FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
           APP_DIR: ${{ env.REMOTE_APP_DIR }}
           TMUX_SESSION: ${{ env.TMUX_SESSION }}
+          START_TRADING: ${{ steps.deploy_mode.outputs.start_trading }}
         run: |
           SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa)
 
@@ -229,6 +242,7 @@ jobs:
             "FYERS_SECRET_KEY=${FYERS_SECRET_KEY}" \
             "APP_DIR=${APP_DIR}" \
             "TMUX_SESSION=${TMUX_SESSION}" \
+            "START_TRADING=${START_TRADING}" \
             bash -s <<'REMOTE'
           set -euo pipefail
           cd "${APP_DIR}"
@@ -255,6 +269,12 @@ jobs:
             tail -n 30 logs/fyersApi.log 2>/dev/null || true
             exit 1
           fi
+          echo "test-api.py passed"
+
+          if [ "${START_TRADING}" != "true" ]; then
+            echo "Skipping tmux — re-run Deploy App with strategy side buy or sell to start trading"
+            exit 0
+          fi
 
           tmux kill-session -t "${TMUX_SESSION}" 2>/dev/null || true
           tmux new-session -d -s "${TMUX_SESSION}" \
@@ -270,6 +290,7 @@ jobs:
           REMOTE
 
       - name: Verify Remote Process
+        if: steps.deploy_mode.outputs.start_trading == 'true'
         env:
           SERVER_IP: ${{ steps.server.outputs.server_ip }}
         run: |

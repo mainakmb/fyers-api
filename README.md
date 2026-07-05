@@ -60,7 +60,7 @@ GitHub Actions
    | `FYERS_SECRET_KEY` | Deploy App |
 
 2. Run [**Deploy Server**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml) — provisions the droplet and syncs state to `mainakmb/tfstate-storage`
-3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — deploys code, writes FYERS secrets, verifies API connectivity with `test-api.py`, then starts `main.py` in tmux. Use **Run workflow**, pick **buy** or **sell** under **Strategy to customize**, then fill in that side's fields only (the other side uses the example file). Choose **use_examples** for token-only redeploys. Push-to-`main` deploys always use both example files.
+3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — syncs code, writes FYERS secrets, and runs `test-api.py`. To **start the bot**, run again with **Strategy to customize** set to **buy** or **sell** and fill in that side's fields. **use_examples** (default), push-to-`main`, and token refresh deploy code and verify the API only — they do not start tmux.
 
 **Connect to the server**
 
@@ -90,7 +90,7 @@ python auth.py
 ./scripts/push-daily-token.sh
 ```
 
-This updates `FYERS_ACCESS_TOKEN` in the `production` environment and triggers **Deploy App**.
+This updates `FYERS_ACCESS_TOKEN` in the `production` environment and triggers **Deploy App** (code sync + `test-api.py` only). Run **Deploy App** again with **buy** or **sell** to start the trading session.
 
 **Destroy the droplet** — run **Deploy Server** manually with the **Destroy server** checkbox checked.
 
