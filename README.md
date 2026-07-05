@@ -60,7 +60,7 @@ GitHub Actions
    | `FYERS_SECRET_KEY` | Deploy App |
 
 2. Run [**Deploy Server**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml) — provisions the droplet and syncs state to `mainakmb/tfstate-storage`
-3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — deploys code, writes FYERS secrets, verifies API connectivity with `test-api.py`, then starts `main.py` in tmux
+3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — deploys code, writes FYERS secrets, verifies API connectivity with `test-api.py`, then starts `main.py` in tmux. Use **Run workflow** to override buy/sell strategy fields (defaults match `.env.buy.example` / `.env.sell.example`). Push-to-`main` deploys use those example files automatically.
 
 **Connect to the server**
 

@@ -129,7 +129,11 @@ ssh -i ~/.ssh/id_rsa root@"${SERVER_IP}" "tail -f /root/trading-bot/logs/fyersAp
 
 ## Strategy configuration
 
-Entry/exit levels live in `.env.buy.example` and `.env.sell.example` in this repo. They are copied to the droplet on each deploy. Edit those files, push to `main`, and the pipeline redeploys with updated strategy settings.
+**Manual deploy (Run workflow):** [Deploy App](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) exposes inputs for every buy/sell field from `.env.buy.example` and `.env.sell.example` (index symbol, options symbol, entry/SL/target, lots, product type, delay seconds). Defaults match the example files — update them for today's contract before running.
+
+**Automatic deploy (push to `main`):** Uses `.env.buy.example` and `.env.sell.example` from the repo. Edit those files and push to redeploy with updated strategy settings.
+
+**Daily token refresh** (`push-daily-token.sh`) triggers Deploy App without inputs, so strategy comes from the example files in `main`.
 
 ## Troubleshooting
 

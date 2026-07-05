@@ -11,6 +11,61 @@ on:
       - ".env.sell.example"
       - ".github/workflows/deploy-app.yml"
   workflow_dispatch:
+    inputs:
+      buy_index_symbol:
+        description: "Buy — INDEX_SYMBOL"
+        type: string
+        default: "NSE:NIFTY50-INDEX"
+      buy_options_symbol:
+        description: "Buy — OPTIONS_SYMBOL"
+        type: string
+        default: "BSE:SENSEX2670277100PE"
+      buy_index_entry:
+        description: "Buy — INDEX_ENTRY"
+        type: string
+        default: "24100.0"
+      buy_order_lots:
+        description: "Buy — ORDER_LOTS"
+        type: string
+        default: "1"
+      buy_product_type:
+        description: "Buy — PRODUCT_TYPE (INTRADAY or MARGIN)"
+        type: choice
+        options:
+          - INTRADAY
+          - MARGIN
+        default: INTRADAY
+      buy_entry_delay_seconds:
+        description: "Buy — ENTRY_DELAY_SECONDS"
+        type: string
+        default: "0"
+      sell_index_symbol:
+        description: "Sell — INDEX_SYMBOL"
+        type: string
+        default: "NSE:NIFTY50-INDEX"
+      sell_options_symbol:
+        description: "Sell — OPTIONS_SYMBOL"
+        type: string
+        default: "BSE:SENSEX2670277100PE"
+      sell_index_stop_loss:
+        description: "Sell — INDEX_STOP_LOSS"
+        type: string
+        default: "24150.0"
+      sell_index_target:
+        description: "Sell — INDEX_TARGET"
+        type: string
+        default: "24036.0"
+      sell_product_type:
+        description: "Sell — PRODUCT_TYPE (INTRADAY or MARGIN)"
+        type: choice
+        options:
+          - INTRADAY
+          - MARGIN
+        default: INTRADAY
+      sell_exit_delay_seconds:
+        description: "Sell — EXIT_DELAY_SECONDS"
+        type: string
+        default: "1"
   repository_dispatch:
     types:
       - refresh-trading-token
@@ -31,6 +86,39 @@ jobs:
     steps:
       - name: Checkout Code Repo
         uses: actions/checkout@v4
+
+      - name: Prepare Strategy Config
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            printf '%s\n' \
+              "INDEX_SYMBOL=${{ inputs.buy_index_symbol }}" \
+              "OPTIONS_SYMBOL=${{ inputs.buy_options_symbol }}" \
+              "INDEX_ENTRY=${{ inputs.buy_index_entry }}" \
+              "ORDER_LOTS=${{ inputs.buy_order_lots }}" \
+              "PRODUCT_TYPE=${{ inputs.buy_product_type }}" \
+              "ENTRY_DELAY_SECONDS=${{ inputs.buy_entry_delay_seconds }}" \
+              > .env.buy
+
+            printf '%s\n' \
+              "INDEX_SYMBOL=${{ inputs.sell_index_symbol }}" \
+              "OPTIONS_SYMBOL=${{ inputs.sell_options_symbol }}" \
+              "INDEX_STOP_LOSS=${{ inputs.sell_index_stop_loss }}" \
+              "INDEX_TARGET=${{ inputs.sell_index_target }}" \
+              "PRODUCT_TYPE=${{ inputs.sell_product_type }}" \
+              "EXIT_DELAY_SECONDS=${{ inputs.sell_exit_delay_seconds }}" \
+              > .env.sell
+
+            echo "Using workflow_dispatch strategy inputs:"
+          else
+            cp .env.buy.example .env.buy
+            cp .env.sell.example .env.sell
+            echo "Using strategy from .env.buy.example and .env.sell.example:"
+          fi
+
+          echo "--- .env.buy ---"
+          cat .env.buy
+          echo "--- .env.sell ---"
+          cat .env.sell
 
       - name: Validate State Repo PAT
         env:
@@ -118,15 +206,8 @@ jobs:
 
           scp "${SSH_OPTS[@]}" \
             buy.py sell.py main.py execution_log.py test-api.py requirements.txt \
-            ".env.buy.example" ".env.sell.example" \
+            ".env.buy" ".env.sell" \
             "root@${SERVER_IP}:${APP_DIR}/"
-
-          ssh "${SSH_OPTS[@]}" "root@${SERVER_IP}" bash -s <<REMOTE
-            set -euo pipefail
-            cd '${APP_DIR}'
-            cp -f .env.buy.example .env.buy
-            cp -f .env.sell.example .env.sell
-          REMOTE
 
       - name: Configure Secrets and Start Trading Session
         env:
