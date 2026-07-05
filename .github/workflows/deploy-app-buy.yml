@@ -1,0 +1,44 @@
+name: Deploy Buy
+
+on:
+  workflow_dispatch:
+    inputs:
+      index_symbol:
+        description: "INDEX_SYMBOL (blank = .env.buy.example)"
+        type: string
+        default: ""
+      options_symbol:
+        description: "OPTIONS_SYMBOL (blank = .env.buy.example)"
+        type: string
+        default: ""
+      index_entry:
+        description: "INDEX_ENTRY (blank = .env.buy.example)"
+        type: string
+        default: ""
+      order_lots:
+        description: "ORDER_LOTS (blank = .env.buy.example)"
+        type: string
+        default: ""
+      product_type:
+        description: "PRODUCT_TYPE: INTRADAY or MARGIN (blank = .env.buy.example)"
+        type: string
+        default: ""
+      entry_delay_seconds:
+        description: "ENTRY_DELAY_SECONDS (blank = .env.buy.example)"
+        type: string
+        default: ""
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-app-reusable.yml
+    with:
+      trading_script: buy.py
+      tmux_session: buy_session
+      apply_buy_overrides: true
+      index_symbol: ${{ inputs.index_symbol }}
+      options_symbol: ${{ inputs.options_symbol }}
+      index_entry: ${{ inputs.index_entry }}
+      order_lots: ${{ inputs.order_lots }}
+      product_type: ${{ inputs.product_type }}
+      entry_delay_seconds: ${{ inputs.entry_delay_seconds }}
+    secrets: inherit

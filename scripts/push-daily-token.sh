@@ -24,5 +24,8 @@ gh secret set FYERS_ACCESS_TOKEN --env production --repo "${REPO}" --body "${TOK
 echo "Triggering workflow ${WORKFLOW}..."
 gh workflow run "${WORKFLOW}" --repo "${REPO}"
 
-echo "Done. Monitor the run with:"
+echo "Done. Sync triggered — start buy/sell with:"
+echo "  gh workflow run deploy-app-buy.yml --repo ${REPO}"
+echo "  gh workflow run deploy-app-sell.yml --repo ${REPO}"
+echo "Monitor sync with:"
 echo "  gh run list --repo ${REPO} --workflow ${WORKFLOW} --limit 1"
