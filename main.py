@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Supervisor entrypoint: runs buy and sell loops as parallel child processes."""
+"""Optional local supervisor: runs buy.py and sell.py in parallel. Server uses separate tmux sessions."""
 
 import subprocess
 import sys

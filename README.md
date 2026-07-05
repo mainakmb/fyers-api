@@ -6,7 +6,7 @@ Python scripts that watch a live index over the FYERS WebSocket and place market
 |--------|---------|
 | `buy.py` | Enter a position when the index hits an entry level |
 | `sell.py` | Exit an open position on stop-loss or target levels |
-| `main.py` | Supervisor that runs `buy.py` and `sell.py` in parallel (used on the server) |
+| `main.py` | Local supervisor that runs `buy.py` and `sell.py` together (optional) |
 
 ## Quick start (local)
 
@@ -33,17 +33,21 @@ python main.py
 
 ## Cloud deployment
 
-Infrastructure and app deploy are split into two GitHub Actions workflows:
+Infrastructure and app deploy use separate GitHub Actions workflows:
 
 | Workflow | What it does |
 |----------|----------------|
 | [**Deploy Server**](.github/workflows/deploy-server.yml) | Provisions a DigitalOcean droplet (`blr1`, 512MB + 1GB swap) and syncs Terraform state to [`mainakmb/tfstate-storage`](https://github.com/mainakmb/tfstate-storage) |
-| [**Deploy App**](.github/workflows/deploy-app.yml) | SSH deploys code to `/root/trading-bot/` and runs `test-api.py`; starts `main.py` in tmux only on a manual run with strategy side **buy** or **sell** |
+| [**Deploy App**](.github/workflows/deploy-app.yml) | Syncs code to `/root/trading-bot/` and runs `test-api.py` (push, token refresh, manual sync) |
+| [**Deploy Buy**](.github/workflows/deploy-app-buy.yml) | Deploys + starts `buy.py` in tmux (`buy_session`) with buy-only inputs |
+| [**Deploy Sell**](.github/workflows/deploy-app-sell.yml) | Deploys + starts `sell.py` in tmux (`sell_session`) with sell-only inputs |
 
 ```text
 GitHub Actions
-  deploy-server.yml  →  DO droplet + tfstate sync
-  deploy-app.yml     →  /root/trading-bot/  (tmux only when buy/sell selected)
+  deploy-server.yml     →  DO droplet + tfstate sync
+  deploy-app.yml        →  code sync + test-api.py
+  deploy-app-buy.yml    →  buy.py  (tmux: buy_session)
+  deploy-app-sell.yml   →  sell.py (tmux: sell_session)
 ```
 
 **First-time setup**
@@ -55,12 +59,13 @@ GitHub Actions
    | `DIGITALOCEAN_TOKEN` | Deploy Server |
    | `SSH_PRIVATE_KEY` | Both |
    | `STATE_REPO_PAT` | Both |
-   | `FYERS_ACCESS_TOKEN` | Deploy App |
-   | `FYERS_APP_ID` | Deploy App |
-   | `FYERS_SECRET_KEY` | Deploy App |
+   | `FYERS_ACCESS_TOKEN` | Deploy App / Buy / Sell |
+   | `FYERS_APP_ID` | Deploy App / Buy / Sell |
+   | `FYERS_SECRET_KEY` | Deploy App / Buy / Sell |
 
 2. Run [**Deploy Server**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-server.yml) — provisions the droplet and syncs state to `mainakmb/tfstate-storage`
-3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — syncs code, writes FYERS secrets, and runs `test-api.py`. To **start the bot**, run again with **Strategy to customize** set to **buy** or **sell** and fill in that side's fields. **use_examples** (default), push-to-`main`, and token refresh deploy code and verify the API only — they do not start tmux.
+3. Run [**Deploy App**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app.yml) — syncs code and runs `test-api.py`
+4. To trade, run [**Deploy Buy**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app-buy.yml) and/or [**Deploy Sell**](https://github.com/mainakmb/fyers-api/actions/workflows/deploy-app-sell.yml) with today's strategy fields (blank inputs keep `.env.buy.example` / `.env.sell.example` values)
 
 **Connect to the server**
 
@@ -73,10 +78,15 @@ ssh -i ~/.ssh/id_ed25519 root@YOUR_DROPLET_IP
 ```
 
 ```bash
-# Check the bot
+# List running sessions
 tmux list-sessions
-tmux attach -t trading_session          # detach: Ctrl+B, then D
-tail -f /root/trading-bot/logs/runner.log
+
+# Attach to buy or sell loop (detach: Ctrl+B, then D)
+tmux attach -t buy_session
+tmux attach -t sell_session
+
+tail -f /root/trading-bot/logs/runner-buy_session.log
+tail -f /root/trading-bot/logs/runner-sell_session.log
 tail -f /root/trading-bot/logs/fyersApi.log
 
 # Re-run API connectivity test manually
@@ -90,7 +100,7 @@ python auth.py
 ./scripts/push-daily-token.sh
 ```
 
-This updates `FYERS_ACCESS_TOKEN` in the `production` environment and triggers **Deploy App** (code sync + `test-api.py` only). Run **Deploy App** again with **buy** or **sell** to start the trading session.
+This updates `FYERS_ACCESS_TOKEN` in the `production` environment and triggers **Deploy App** (code sync + `test-api.py` only). Then run **Deploy Buy** and/or **Deploy Sell** to start the loops you need.
 
 **Destroy the droplet** — run **Deploy Server** manually with the **Destroy server** checkbox checked.
 
@@ -183,7 +193,7 @@ cp .env.sell.example .env.sell
 | `PRODUCT_TYPE` | FYERS product type (`INTRADAY` or `MARGIN`) | `INTRADAY` |
 | `EXIT_DELAY_SECONDS` | Premium float delay before target exit | `1` |
 
-Update `OPTIONS_SYMBOL` to match your current expiry and strike before each session. On the server, edit `.env.buy.example` / `.env.sell.example` and push to `main` to sync strategy files (code + `test-api.py` only) — run **Deploy App** manually with **buy** or **sell** to go live.
+Update `OPTIONS_SYMBOL` to match your current expiry and strike before each session. Edit `.env.buy.example` / `.env.sell.example` and push to `main` to sync strategy files, or override fields in **Deploy Buy** / **Deploy Sell**. Push and token refresh sync code only — run the buy/sell workflows to go live.
 
 ### 4. Verify API connectivity
 
@@ -210,7 +220,7 @@ Runtime logs are written under `logs/` (gitignored):
 
 On the server (`/root/trading-bot/logs/`):
 
-- `runner.log` — stdout/stderr from `main.py` (useful when tmux exits on startup)
+- `runner-buy_session.log` / `runner-sell_session.log` — stdout/stderr from each tmux loop
 - `fyersApi.log` — FYERS SDK logs
 
 ## Project layout
@@ -228,7 +238,10 @@ On the server (`/root/trading-bot/logs/`):
 ├── terraform/                   # DigitalOcean droplet (Terraform)
 ├── .github/workflows/
 │   ├── deploy-server.yml        # Provision / destroy droplet
-│   └── deploy-app.yml           # SSH code deploy; tmux on buy/sell only
+│   ├── deploy-app.yml           # Sync code + test-api
+│   ├── deploy-app-buy.yml       # Start buy.py in tmux
+│   ├── deploy-app-sell.yml      # Start sell.py in tmux
+│   └── deploy-app-reusable.yml  # Shared deploy logic
 ├── docs/
 │   └── DAILY_WORKFLOW.md        # Full CI/CD ops guide
 └── tests/

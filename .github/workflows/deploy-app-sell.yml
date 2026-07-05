@@ -1,0 +1,44 @@
+name: Deploy Sell
+
+on:
+  workflow_dispatch:
+    inputs:
+      index_symbol:
+        description: "INDEX_SYMBOL (blank = .env.sell.example)"
+        type: string
+        default: ""
+      options_symbol:
+        description: "OPTIONS_SYMBOL (blank = .env.sell.example)"
+        type: string
+        default: ""
+      index_stop_loss:
+        description: "INDEX_STOP_LOSS (blank = .env.sell.example)"
+        type: string
+        default: ""
+      index_target:
+        description: "INDEX_TARGET (blank = .env.sell.example)"
+        type: string
+        default: ""
+      product_type:
+        description: "PRODUCT_TYPE: INTRADAY or MARGIN (blank = .env.sell.example)"
+        type: string
+        default: ""
+      exit_delay_seconds:
+        description: "EXIT_DELAY_SECONDS (blank = .env.sell.example)"
+        type: string
+        default: ""
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-app-reusable.yml
+    with:
+      trading_script: sell.py
+      tmux_session: sell_session
+      apply_sell_overrides: true
+      index_symbol: ${{ inputs.index_symbol }}
+      options_symbol: ${{ inputs.options_symbol }}
+      index_stop_loss: ${{ inputs.index_stop_loss }}
+      index_target: ${{ inputs.index_target }}
+      product_type: ${{ inputs.product_type }}
+      exit_delay_seconds: ${{ inputs.exit_delay_seconds }}
+    secrets: inherit

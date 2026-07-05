@@ -1,0 +1,299 @@
+name: Deploy App (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      trading_script:
+        description: "Script to run in tmux (empty = sync and test-api only)"
+        required: false
+        type: string
+        default: ""
+      tmux_session:
+        description: "tmux session name when starting a script"
+        required: false
+        type: string
+        default: ""
+      apply_buy_overrides:
+        description: "Apply buy strategy input overrides to .env.buy"
+        required: false
+        type: boolean
+        default: false
+      apply_sell_overrides:
+        description: "Apply sell strategy input overrides to .env.sell"
+        required: false
+        type: boolean
+        default: false
+      index_symbol:
+        type: string
+        default: ""
+      options_symbol:
+        type: string
+        default: ""
+      product_type:
+        type: string
+        default: ""
+      index_entry:
+        type: string
+        default: ""
+      order_lots:
+        type: string
+        default: ""
+      entry_delay_seconds:
+        type: string
+        default: ""
+      index_stop_loss:
+        type: string
+        default: ""
+      index_target:
+        type: string
+        default: ""
+      exit_delay_seconds:
+        type: string
+        default: ""
+
+env:
+  TF_STATE_REPO: mainakmb/tfstate-storage
+  TF_STATE_PROJECT: fyers-api
+  TF_WORKING_DIR: terraform
+  REMOTE_APP_DIR: /root/trading-bot
+
+jobs:
+  deploy:
+    name: Deploy to Droplet
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout Code Repo
+        uses: actions/checkout@v4
+
+      - name: Prepare Strategy Config
+        env:
+          APPLY_BUY: ${{ inputs.apply_buy_overrides }}
+          APPLY_SELL: ${{ inputs.apply_sell_overrides }}
+          INDEX_SYMBOL: ${{ inputs.index_symbol }}
+          OPTIONS_SYMBOL: ${{ inputs.options_symbol }}
+          PRODUCT_TYPE: ${{ inputs.product_type }}
+          INDEX_ENTRY: ${{ inputs.index_entry }}
+          ORDER_LOTS: ${{ inputs.order_lots }}
+          ENTRY_DELAY_SECONDS: ${{ inputs.entry_delay_seconds }}
+          INDEX_STOP_LOSS: ${{ inputs.index_stop_loss }}
+          INDEX_TARGET: ${{ inputs.index_target }}
+          EXIT_DELAY_SECONDS: ${{ inputs.exit_delay_seconds }}
+        run: |
+          set_env_value() {
+            local file="$1" key="$2" value="$3"
+            if [ -z "${value}" ]; then
+              return 0
+            fi
+            if grep -q "^${key}=" "${file}"; then
+              sed -i "s|^${key}=.*|${key}=${value}|" "${file}"
+            else
+              printf '%s\n' "${key}=${value}" >> "${file}"
+            fi
+          }
+
+          cp .env.buy.example .env.buy
+          cp .env.sell.example .env.sell
+
+          if [ "${APPLY_BUY}" = "true" ]; then
+            set_env_value .env.buy INDEX_SYMBOL "${INDEX_SYMBOL}"
+            set_env_value .env.buy OPTIONS_SYMBOL "${OPTIONS_SYMBOL}"
+            set_env_value .env.buy PRODUCT_TYPE "${PRODUCT_TYPE}"
+            set_env_value .env.buy INDEX_ENTRY "${INDEX_ENTRY}"
+            set_env_value .env.buy ORDER_LOTS "${ORDER_LOTS}"
+            set_env_value .env.buy ENTRY_DELAY_SECONDS "${ENTRY_DELAY_SECONDS}"
+            echo "Buy strategy overrides applied"
+          fi
+
+          if [ "${APPLY_SELL}" = "true" ]; then
+            set_env_value .env.sell INDEX_SYMBOL "${INDEX_SYMBOL}"
+            set_env_value .env.sell OPTIONS_SYMBOL "${OPTIONS_SYMBOL}"
+            set_env_value .env.sell PRODUCT_TYPE "${PRODUCT_TYPE}"
+            set_env_value .env.sell INDEX_STOP_LOSS "${INDEX_STOP_LOSS}"
+            set_env_value .env.sell INDEX_TARGET "${INDEX_TARGET}"
+            set_env_value .env.sell EXIT_DELAY_SECONDS "${EXIT_DELAY_SECONDS}"
+            echo "Sell strategy overrides applied"
+          fi
+
+          if [ "${APPLY_BUY}" != "true" ] && [ "${APPLY_SELL}" != "true" ]; then
+            echo "Strategy from .env.buy.example and .env.sell.example"
+          fi
+
+          echo "--- .env.buy ---"
+          cat .env.buy
+          echo "--- .env.sell ---"
+          cat .env.sell
+
+      - name: Validate State Repo PAT
+        env:
+          STATE_REPO_PAT: ${{ secrets.STATE_REPO_PAT }}
+        run: |
+          if [ -z "${STATE_REPO_PAT}" ]; then
+            echo "::error::STATE_REPO_PAT is empty. Add it under Settings → Environments → production → Environment secrets."
+            exit 1
+          fi
+
+          http_code="$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${STATE_REPO_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ env.TF_STATE_REPO }}")"
+
+          if [ "${http_code}" != "200" ]; then
+            echo "::error::STATE_REPO_PAT cannot access ${{ env.TF_STATE_REPO }} (HTTP ${http_code})."
+            exit 1
+          fi
+
+      - name: Validate FYERS Secrets
+        env:
+          FYERS_ACCESS_TOKEN: ${{ secrets.FYERS_ACCESS_TOKEN }}
+          FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
+          FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
+        run: |
+          missing=0
+          for name in FYERS_ACCESS_TOKEN FYERS_APP_ID FYERS_SECRET_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::${name} is empty. Add it under Settings → Environments → production → Environment secrets."
+              missing=1
+            fi
+          done
+          exit "${missing}"
+
+      - name: Checkout Isolated State Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TF_STATE_REPO }}
+          token: ${{ secrets.STATE_REPO_PAT }}
+          path: remote-state-dir
+
+      - name: Resolve Server IP from Remote State
+        run: |
+          STATE_FILE="remote-state-dir/${{ env.TF_STATE_PROJECT }}/terraform.tfstate"
+          LOCAL_STATE="${{ env.TF_WORKING_DIR }}/terraform.tfstate"
+
+          if [ ! -f "${STATE_FILE}" ]; then
+            echo "No remote state found at ${STATE_FILE}" >&2
+            echo "Run the Deploy Server workflow first." >&2
+            exit 1
+          fi
+
+          mkdir -p "${{ env.TF_WORKING_DIR }}"
+          cp "${STATE_FILE}" "${LOCAL_STATE}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Read Server IP
+        id: server
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init -input=false
+          echo "server_ip=$(terraform output -raw server_static_ip)" >> "$GITHUB_OUTPUT"
+          echo "Deploying to $(terraform output -raw server_static_ip)"
+
+      - name: Prepare SSH Key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: bash .github/scripts/prepare-ssh-key.sh
+
+      - name: Sync Application Code to Droplet
+        env:
+          SERVER_IP: ${{ steps.server.outputs.server_ip }}
+        run: |
+          APP_DIR="${{ env.REMOTE_APP_DIR }}"
+          SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa)
+
+          ssh "${SSH_OPTS[@]}" "root@${SERVER_IP}" "mkdir -p '${APP_DIR}/logs'"
+
+          scp "${SSH_OPTS[@]}" \
+            buy.py sell.py main.py execution_log.py test-api.py requirements.txt \
+            ".env.buy" ".env.sell" \
+            "root@${SERVER_IP}:${APP_DIR}/"
+
+      - name: Configure Secrets and Verify API
+        env:
+          SERVER_IP: ${{ steps.server.outputs.server_ip }}
+          FYERS_ACCESS_TOKEN: ${{ secrets.FYERS_ACCESS_TOKEN }}
+          FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
+          FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
+          APP_DIR: ${{ env.REMOTE_APP_DIR }}
+          TRADING_SCRIPT: ${{ inputs.trading_script }}
+          TMUX_SESSION: ${{ inputs.tmux_session }}
+        run: |
+          SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa)
+
+          ssh "${SSH_OPTS[@]}" "root@${SERVER_IP}" env \
+            "FYERS_ACCESS_TOKEN=${FYERS_ACCESS_TOKEN}" \
+            "FYERS_APP_ID=${FYERS_APP_ID}" \
+            "FYERS_SECRET_KEY=${FYERS_SECRET_KEY}" \
+            "APP_DIR=${APP_DIR}" \
+            "TRADING_SCRIPT=${TRADING_SCRIPT}" \
+            "TMUX_SESSION=${TMUX_SESSION}" \
+            bash -s <<'REMOTE'
+          set -euo pipefail
+          cd "${APP_DIR}"
+
+          umask 077
+          printf '%s\n' \
+            "FYERS_ACCESS_TOKEN=${FYERS_ACCESS_TOKEN}" \
+            "FYERS_APP_ID=${FYERS_APP_ID}" \
+            "FYERS_SECRET_KEY=${FYERS_SECRET_KEY}" \
+            > .env
+          chmod 600 .env
+
+          if [ ! -d .venv ]; then
+            python3 -m venv .venv
+          fi
+          # shellcheck disable=SC1091
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+          echo "Running FYERS API connectivity test..."
+          if ! python3 test-api.py; then
+            echo "::error::FYERS API test failed. Token may be expired or secrets misconfigured."
+            tail -n 30 logs/fyersApi.log 2>/dev/null || true
+            exit 1
+          fi
+          echo "test-api.py passed"
+
+          if [ -z "${TRADING_SCRIPT}" ]; then
+            echo "Sync complete — no trading script started"
+            exit 0
+          fi
+
+          LOG_FILE="logs/runner-${TMUX_SESSION}.log"
+          tmux kill-session -t "${TMUX_SESSION}" 2>/dev/null || true
+          tmux new-session -d -s "${TMUX_SESSION}" \
+            "cd '${APP_DIR}' && source .venv/bin/activate && python3 '${TRADING_SCRIPT}' >> '${LOG_FILE}' 2>&1"
+
+          sleep 3
+          tmux list-sessions || true
+          if ! tmux has-session -t "${TMUX_SESSION}"; then
+            echo "::error::tmux session exited immediately. Recent logs:"
+            tail -n 50 "${LOG_FILE}" 2>/dev/null || true
+            exit 1
+          fi
+          echo "Started ${TRADING_SCRIPT} in tmux session ${TMUX_SESSION}"
+          REMOTE
+
+      - name: Verify Remote Process
+        if: inputs.trading_script != ''
+        env:
+          SERVER_IP: ${{ steps.server.outputs.server_ip }}
+        run: |
+          SESSION="${{ inputs.tmux_session }}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa \
+            "root@${SERVER_IP}" bash -s <<REMOTE
+          set -euo pipefail
+          if tmux has-session -t '${SESSION}'; then
+            echo "tmux session '${SESSION}' is running"
+            tmux list-sessions
+            exit 0
+          fi
+          echo "::error::tmux session '${SESSION}' not found"
+          tail -n 80 /root/trading-bot/logs/runner-${SESSION}.log 2>/dev/null || true
+          exit 1
+          REMOTE
