@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout Code Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Prepare Strategy Config
         env:
@@ -160,7 +160,7 @@ jobs:
           exit "${missing}"
 
       - name: Checkout Isolated State Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.TF_STATE_REPO }}
           token: ${{ secrets.STATE_REPO_PAT }}
@@ -181,7 +181,7 @@ jobs:
           cp "${STATE_FILE}" "${LOCAL_STATE}"
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4.0.1
         with:
           terraform_version: "1.9.0"
 
